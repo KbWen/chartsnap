@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>chartsnap — drop a CSV, get a share-ready chart</title>
+    <meta
+      name="description"
+      content="Drop a CSV, get a clean chart sized for Twitter, Instagram, or A4 print. Zero config, 100% in your browser, free PNG + SVG export."
+    />
+  </head>
+  <body>
+    <header class="site-header">
+      <p class="kicker">csv &rarr; chart</p>
+      <h1 class="wordmark">chartsnap</h1>
+      <p class="tagline">
+        Drop a CSV, get a share-ready chart. Zero setup &mdash; nothing leaves your browser.
+      </p>
+    </header>
+
+    <main>
+      <section
+        id="drop"
+        class="dropzone"
+        tabindex="0"
+        aria-label="Drop a CSV file here, or click to browse"
+      >
+        <div class="drop-inner">
+          <p class="drop-title">Drop a CSV here</p>
+          <p class="drop-sub">or click to browse · or paste CSV text anywhere on the page</p>
+          <input id="file" type="file" accept=".csv,text/csv,text/plain" hidden />
+        </div>
+      </section>
+
+      <div class="samples">
+        <span class="samples-label">no CSV handy?</span>
+        <button type="button" class="chip" data-sample="line">Sales &middot; line</button>
+        <button type="button" class="chip" data-sample="bar">Votes &middot; bar</button>
+        <button type="button" class="chip" data-sample="scatter">Height/weight &middot; scatter</button>
+      </div>
+
+      <details id="paste-details" class="paste">
+        <summary>Paste CSV text instead</summary>
+        <textarea
+          id="paste-area"
+          rows="6"
+          placeholder="name,value&#10;Apples,30&#10;Pears,45&#10;Cherries,18"
+        ></textarea>
+        <button id="paste-render" type="button" class="btn">Render pasted CSV</button>
+      </details>
+
+      <p id="status" class="status" role="status" hidden></p>
+
+      <section id="result" class="result" hidden>
+        <div class="readout">
+          <span class="readout-label">detected</span>
+          <p id="info" class="info"></p>
+        </div>
+        <div class="type-toggle" id="type-toggle" role="group" aria-label="Chart type">
+          <span class="toggle-label">show as</span>
+          <button type="button" class="type-btn" data-type="line">line</button>
+          <button type="button" class="type-btn" data-type="bar">bar</button>
+          <button type="button" class="type-btn" data-type="scatter">scatter</button>
+        </div>
+        <p id="notes" class="notes"></p>
+
+        <div class="preview-wrap">
+          <canvas id="preview" aria-label="Chart preview"></canvas>
+        </div>
+
+        <div class="export-bar">
+          <label for="preset" class="export-label">Size</label>
+          <select id="preset" class="select"></select>
+          <button id="dl-png" type="button" class="btn btn-primary">Download PNG</button>
+          <button id="dl-svg" type="button" class="btn btn-primary">Download SVG</button>
+        </div>
+        <p class="export-hint">
+          PNG and SVG are both free, watermark-free, and generated entirely on your device.
+        </p>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>
+        100% client-side · your data never leaves this page ·
+        <a id="repo-link" href="#" rel="noopener">source</a>
+      </p>
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
