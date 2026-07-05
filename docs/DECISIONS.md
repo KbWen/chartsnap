@@ -6,6 +6,7 @@
 <!-- example: 2026-01-15 — chose heic-decode over heic2any — maintained + smaller -->
 <!-- example: 2026-01-16 — Progress: done <csv parser>; next <pdf render>; blocked <none> -->
 <!-- override log format (see AGENTS.md Core Rules): YYYY-MM-DD — SKIPPED <rule> for <what> — <reason> -->
+- 2026-07-06 — SHIPPED: public repo https://github.com/KbWen/chartsnap, live at https://kbwen.github.io/chartsnap/ (GitHub Pages via Actions); CI + deploy workflows green; topics + About + homepage set; README rewritten in a plain human voice. Remaining LAUNCH nice-to-haves: animated demo GIF, CONTRIBUTING note, awesome-list PR after 30 days.
 - 2026-07-06 — Progress: done <v1.1 per user decisions: (1) escape hatch = minimal line/bar/scatter override toggle, scatter disabled when <2 numeric cols, categorical-line rendering added to chart.ts, detectChart(force) + feasibleTypes(), 5 new tests; (2) repositioning re-anchored on privacy/offline/deterministic in SPEC+README; also preview animation off for snappy render>; next <remaining LAUNCH items: animated GIF, GH topics/About, deploy>; blocked <none — note: preview screenshot tool times out on live canvas in this env; verified toggle via prod build inspection + tests>
 - 2026-07-06 — escape hatch decided L1 (user): a single line/bar/scatter toggle, NOT field mapping — SPEC Non-goals amended to allow it; default stays auto-detected
 - 2026-07-06 — repositioning decided (user): headline = privacy/offline/deterministic; free SVG demoted to a supporting feature (the trio is 2026 commodity per the review)
