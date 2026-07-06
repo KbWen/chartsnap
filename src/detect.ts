@@ -43,15 +43,8 @@ function autoType(c: Cols): ChartType {
   return "bar"; // a single numeric column → bar by row
 }
 
-/**
- * Zero-config chart-type inference from CSV *shape* (Done criteria #1):
- *   - a date/time column present   → line
- *   - a category column + numbers  → bar
- *   - two-or-more numeric only      → scatter
- *   - a single numeric column       → bar by row
- * Pass `force` to override the guess (the escape hatch, v1.1) — throws DetectError if
- * that type can't be built (e.g. scatter without two numeric columns).
- */
+// Guess a chart type from the CSV's shape. Pass `force` to override the guess; it
+// throws when that type can't be built (e.g. scatter needs two numeric columns).
 export function detectChart(parsed: ParsedCsv, force?: ChartType): Detection {
   const c = classify(parsed);
   if (c.numbers.length === 0) {

@@ -15,9 +15,9 @@ Chart.register(...registerables);
 Chart.defaults.font.family =
   "system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif";
 
-// Curated, warm-editorial data palette (harmonises with the tool's paper/ink UI).
-// The first two — teal-green + warm ochre — carry the common 1–2 series case.
-const PALETTE = ["#0f7a5f", "#e0892e", "#3f6f9c", "#c25e54", "#7b6aa8", "#5a8f6e"];
+// Two colours I actually like (deep pine + ochre) carry the common 1–2 series case;
+// the rest are muted on purpose so they sit back instead of fighting for attention.
+const PALETTE = ["#155e4c", "#cf8636", "#6b7f92", "#a86a5f", "#8a8199", "#6f8a76"];
 
 /** Warm near-white background shared by the raster (PNG) and vector (SVG) exports. */
 export const EXPORT_BG = "#fffdf8";
@@ -70,7 +70,7 @@ export function buildConfig(
   const fontScale = clamp(Math.min(opts.width, opts.height) / 700, 1, 4);
   const px = (n: number) => Math.round(n * fontScale);
   const font = {
-    title: px(21),
+    title: px(25),
     axis: px(12),
     ticks: px(12),
     legend: px(12.5),
@@ -294,7 +294,7 @@ export function buildConfig(
       backgroundColor: color,
       borderColor: color,
       borderWidth: 0,
-      borderRadius: px(5),
+      borderRadius: px(2),
       borderSkipped: false,
       maxBarThickness: px(96),
       categoryPercentage: 0.72,

@@ -23,6 +23,7 @@ export function decodeUtf8(buffer: ArrayBuffer): { text: string; looksNonUtf8: b
 }
 
 function cleanNumber(s: string): number {
+  // TODO: US-format only. EU "1.234,56" falls through and reads as a category.
   const t = s.trim().replace(/,(?=\d{3}(\D|$))/g, ""); // strip thousands separators
   if (t === "") return NaN;
   const n = Number(t);

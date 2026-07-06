@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>chartsnap — drop a CSV, get a share-ready chart</title>
+    <title>chartsnap — CSV to chart, in your browser</title>
     <meta
       name="description"
-      content="Drop a CSV, get a clean chart sized for Twitter, Instagram, or A4 print. Zero config, 100% in your browser, free PNG + SVG export."
+      content="Drop a CSV and get a chart sized for Twitter, Instagram, or A4. Runs in your browser, nothing uploaded. Free PNG and SVG export."
     />
   </head>
   <body>
@@ -14,7 +14,7 @@
       <p class="kicker">csv &rarr; chart</p>
       <h1 class="wordmark">chartsnap</h1>
       <p class="tagline">
-        Drop a CSV, get a share-ready chart. Zero setup &mdash; nothing leaves your browser.
+        Drop a CSV, get a chart you can post. Nothing leaves your browser.
       </p>
     </header>
 
@@ -27,7 +27,7 @@
       >
         <div class="drop-inner">
           <p class="drop-title">Drop a CSV here</p>
-          <p class="drop-sub">or click to browse · or paste CSV text anywhere on the page</p>
+          <p class="drop-sub">click to browse, or paste a CSV anywhere on the page</p>
           <input id="file" type="file" accept=".csv,text/csv,text/plain" hidden />
         </div>
       </section>
@@ -74,16 +74,13 @@
           <button id="dl-png" type="button" class="btn btn-primary">Download PNG</button>
           <button id="dl-svg" type="button" class="btn btn-primary">Download SVG</button>
         </div>
-        <p class="export-hint">
-          PNG and SVG are both free, watermark-free, and generated entirely on your device.
-        </p>
+        <p class="export-hint">Both free, no watermark.</p>
       </section>
     </main>
 
     <footer class="site-footer">
       <p>
-        100% client-side · your data never leaves this page ·
-        <a id="repo-link" href="#" rel="noopener">source</a>
+        Runs in your browser. <a id="repo-link" href="#" rel="noopener">Source</a> · MIT
       </p>
     </footer>
 

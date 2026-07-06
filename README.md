@@ -1,14 +1,14 @@
 # chartsnap
 
-Turn a CSV into a chart you can post — without uploading it anywhere.
+Turn a CSV into a chart you can post, without uploading it anywhere.
 
-Drop a file, chartsnap picks a sensible chart from your columns, and you download a
-clean PNG or SVG sized for Twitter, Instagram, or an A4 page. It all runs in the
-browser, so your data never touches a server.
+Drop a file, chartsnap guesses a chart from your columns, and you download a PNG or SVG
+sized for Twitter, Instagram, or an A4 page. It all runs in the browser, so your data
+never touches a server.
 
 **Live:** https://kbwen.github.io/chartsnap/
 
-![A chartsnap line chart of monthly revenue vs expenses — warm background, teal and ochre lines](docs/hero.png)
+![A chartsnap line chart of weekly commits with a two-week gap, deep green line on a warm background](docs/hero.png)
 
 ## Why it exists
 
@@ -33,7 +33,7 @@ No CSV to hand? There are sample buttons on the page.
 
 ## How it picks a chart
 
-It reads the shape of your columns:
+It looks at what's in each column:
 
 | Your data                    | Chart        |
 | ---------------------------- | ------------ |

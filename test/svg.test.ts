@@ -34,7 +34,7 @@ describe("SVG export produces real, non-empty vector output", () => {
     const detection = detectChart(parsed, "line"); // force line via the escape hatch
     const svg = renderSvgString(parsed, detection, "line", PRESETS[0]);
     expect(svg).toMatch(/<path\b/);
-    expect(svg).toContain("#0f7a5f");
+    expect(svg).toContain("#155e4c");
   });
 
   it("bar chart renders rounded corners as arc paths (not squared-off)", () => {
@@ -44,7 +44,7 @@ describe("SVG export produces real, non-empty vector output", () => {
     // Rounded bar tops are drawn via ctx.arc() → SVG elliptical-arc "A" commands.
     const barPath = [...svg.matchAll(/<path\b[^>]*>/g)]
       .map((m) => m[0])
-      .find((p) => p.toLowerCase().includes("#0f7a5f"));
+      .find((p) => p.toLowerCase().includes("#155e4c"));
     expect(barPath).toBeTruthy();
     expect(barPath).toMatch(/\bd="[^"]*[Aa]/);
   });
