@@ -4,13 +4,13 @@
 
 ## Repo readiness
 
-- [ ] README first 2 lines: what it is + why care (5-second rule)
-- [~] Demo GIF/screenshot above the fold — static hero (docs/hero.png) is in the README;
-      an animated drop→chart→export GIF still to record
-- [ ] Quickstart in ≤3 steps, copy-pasteable
-- [ ] README documents every user-facing option/flag, one real example per major mode, and a "known limitations / not for" line
-- [ ] Fresh collision check: nearest competitors + their stars as of launch week (update SPEC if the landscape moved)
-- [ ] Decide: are SPEC/DECISIONS competitor notes OK to be public? Is the DECISIONS SKIPPED log OK to publish (≥3 skips → review first)? Accepting outside PRs? → add a 2-line CONTRIBUTING note
+- [x] README first 2 lines: what it is + why care (5-second rule)
+- [x] Demo GIF/screenshot above the fold — static hero (docs/hero.png) + docs/demo.gif
+      captured from the real UI
+- [x] Quickstart in ≤3 steps, copy-pasteable
+- [x] README documents every user-facing option/flag, one real example per major mode, and a "known limitations / not for" line
+- [x] Fresh collision check: competitors re-verified 2026 in the market review (see DECISIONS); SPEC re-anchored
+- [x] Decide public/PRs — CONTRIBUTING.md added; no SKIPPED-rule log to worry about. Open call: DECISIONS.md openly records AI-assisted process (fine by me, but see chat — user's choice)
 - [x] License chosen (MIT default for tools) — see LICENSE
 - [x] Up to 20 GitHub topics, keyword-front-loaded About (searchable > clever) — 15 topics + description set
 - [x] If web tool: GitHub Pages deployed, link in About — https://kbwen.github.io/chartsnap/ (CI + deploy green)
@@ -28,13 +28,14 @@
       - Zero data-carrying network requests (DevTools Network tab: only localhost
         app assets; source has no fetch/XHR/beacon/WebSocket).
       - `npm run build` succeeds; dev-only test bridge stripped from the bundle.
-      - Still TODO for launch: export a demo GIF/screenshot; deploy to Pages.
+      - Shipped: live on Pages, CI + deploy green, demo GIF + hero captured from the real UI.
 
 ## Owner handoff
 
 - [ ] If you keep a product list / content hub: register this tool there (skip if not applicable)
-- [ ] Demo assets exported (GIF, screenshots)
-- [ ] One-line channel-fit note: where would this tool's audience actually see it?
+- [x] Demo assets exported (GIF, screenshots) — docs/hero.png + docs/demo.gif
+- [x] One-line channel-fit note: Show HN + r/webdev / r/dataisbeautiful, and people searching
+      "csv to chart no upload" / "csv chart offline" — the privacy angle is the hook
 
 ## Post-launch
 
