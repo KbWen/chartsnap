@@ -31,6 +31,8 @@ npm run dev
 
 No CSV to hand? There are sample buttons on the page.
 
+![Loading a CSV in chartsnap and switching between line, bar, and scatter](docs/demo.gif)
+
 ## How it picks a chart
 
 It looks at what's in each column:
