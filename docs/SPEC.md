@@ -36,20 +36,24 @@ learning curve), Datawrapper/Flourish (signup + SVG paywalled), matplotlib (code
 
 ## Done criteria (v1)
 
-- [ ] Drop/paste a CSV → a sensible default chart renders with ZERO configuration
+> All five verified against a real run on 2026-07-10 (see DECISIONS). They had been true
+> since 2026-07-05 — the boxes were simply never ticked.
+
+- [x] Drop/paste a CSV → a sensible default chart renders with ZERO configuration
       (auto-detect: date/time column → line; categories + numbers → bar;
       two numeric columns → scatter)
-- [ ] One-click export presets: Twitter card 1200×675, IG post 1080×1080, A4 print —
+- [x] One-click export presets: Twitter card 1200×675, IG post 1080×1080, A4 print —
       PNG and SVG, both free, no watermark
-- [ ] Edge cases handled: quoted commas, missing values, >1,000 rows (sample or
+- [x] Edge cases handled: quoted commas, missing values, >1,000 rows (sample or
       graceful message), non-UTF-8 fallback message
-- [ ] 100% client-side: works offline after first load; zero network requests
-      carrying user data (verifiable in devtools Network tab)
-- [ ] Deploys as a static site on GitHub Pages
+- [x] 100% client-side: works offline after first load; zero network requests
+      carrying user data (verifiable in devtools Network tab). The offline half of this
+      only became true in v1.3, when a service worker started backing it.
+- [x] Deploys as a static site on GitHub Pages
 
 ## v1.1 — decided 2026-07-06 (after the multi-agent review)
 
-- [ ] **Chart-type override (escape hatch):** a minimal line / bar / scatter toggle so a
+- [x] **Chart-type override (escape hatch):** a minimal line / bar / scatter toggle so a
       wrong auto-detection isn't a dead end. Default stays auto-detected; scatter is
       disabled when there are <2 numeric columns. This is the ONLY manual control — not a
       field/axis mapping UI.

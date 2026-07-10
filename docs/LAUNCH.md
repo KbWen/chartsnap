@@ -41,4 +41,8 @@
 
 - [ ] First 3 pieces of feedback (issues/comments/DMs) triaged back into SPEC
       "Later" list or DECISIONS.md
-- [ ] After any change to flags/usage, re-verify the README quickstart against a real run
+- [x] After any change to flags/usage, re-verify the README quickstart against a real run
+      — done 2026-07-10 after the v1.2/v1.3 README edits: wiped `node_modules`, ran
+      `npm install` then `npm run dev`, and checked every claim in the README's chart
+      table plus the six-series note, deterministic SVG, and the three export presets.
+      (Standing rule: re-tick this after the next usage change.)

@@ -37,15 +37,17 @@ No CSV to hand? There are sample buttons on the page.
 
 It looks at what's in each column:
 
-| Your data                    | Chart        |
-| ---------------------------- | ------------ |
-| a date or 4-digit year       | line         |
-| text categories + numbers    | bar          |
-| two or more number columns   | scatter      |
-| a single number column       | bar, by row  |
+| Your data                          | Chart        |
+| ---------------------------------- | ------------ |
+| a date column                      | line         |
+| 4-digit years under a `year` header | line, by year |
+| text categories + numbers          | bar          |
+| two or more number columns         | scatter      |
+| a single number column             | bar, by row  |
 
-Extra number columns become extra series. Guessed wrong? There's a line / bar / scatter
-switch under the chart — the only setting, and that's on purpose.
+Extra number columns become extra series, up to six — if any don't fit, the chart says
+which. Guessed wrong? There's a line / bar / scatter switch under the chart — the only
+setting, and that's on purpose.
 
 Then pick a size and download. PNG and SVG both, free, no watermark.
 
