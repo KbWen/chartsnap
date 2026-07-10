@@ -11,7 +11,7 @@
 // The live page is safe by construction (main.ts assigns only .textContent) and is checked
 // by hand in the browser; jsdom can't host main.ts without the real index.html.
 import { describe, expect, it } from "vitest";
-import { parseCsv } from "../src/csv";
+import { parseCsv, scrub } from "../src/csv";
 import { detectChart } from "../src/detect";
 import { exportSvg, PRESETS, renderSvgString } from "../src/export";
 import type { ChartType } from "../src/types";
@@ -106,16 +106,14 @@ describe("a hostile CSV cannot put script into the exported SVG", () => {
     expect(svg.includes("$&$1$`$'$$ end") || svg.includes("$&amp;")).toBe(true);
   });
 
-  // A raw C0 control char is not legal in XML, so the SVG fails to open. That is
-  // fail-closed (renders nothing), never a script-execution path.
-  it("a control char yields a malformed but still script-free SVG", () => {
+  // C0 control chars are illegal in XML. Since v1.3 they are stripped at parse time, so the
+  // export stays well-formed instead of producing a file the user cannot reopen.
+  it("a control char is stripped, leaving a well-formed SVG", () => {
     const parsed = parseCsv(`cat,val\nrow${NUL}one,10\nrowtwo,20`);
-    const svg = renderSvgString(parsed, detectChart(parsed), "t", PRESETS[0]);
-    expect(svg.includes(NUL), "raw NUL reaches the SVG").toBe(true);
-    const doc = new DOMParser().parseFromString(normalizeRoot(svg), "image/svg+xml");
-    expect(doc.querySelectorAll("parsererror").length, "fails closed").toBe(1);
-    expect(RAW_SCRIPT_TAG.test(svg)).toBe(false);
-    expect(ON_ATTR_IN_TAG.test(svg)).toBe(false);
+    // Titles derived from a file name are scrubbed at the boundary in main.ts.
+    const svg = renderSvgString(parsed, detectChart(parsed), scrub(`t${NUL}`), PRESETS[0]);
+    expect(svg.includes(NUL), "NUL must not reach the SVG").toBe(false);
+    assertInert(svg, "control-char");
   });
 
   it("a 2,000-column CSV parses without throwing", () => {

@@ -1,7 +1,7 @@
 import "./style.css";
 import { Chart } from "chart.js";
 import { buildConfig } from "./chart";
-import { CsvError, decodeUtf8, parseCsv } from "./csv";
+import { CsvError, decodeUtf8, parseCsv, scrub } from "./csv";
 import { DetectError, detectChart, feasibleTypes } from "./detect";
 import { downloadBlob, exportPng, exportSvg, PRESETS, renderSvgString } from "./export";
 import type { ChartType, Detection, ExportPreset, ParsedCsv } from "./types";
@@ -113,6 +113,19 @@ function syncToggle(parsed: ParsedCsv, activeType: ChartType): void {
   }
 }
 
+/** Parse warnings, plus any numeric column this chart type can't show. */
+function showNotes(parsed: ParsedCsv, detection: Detection): void {
+  const lines = [...parsed.notes];
+  const dropped = detection.droppedSeries;
+  if (dropped.length > 0) {
+    const shown = detection.yColumns.length;
+    lines.push(
+      `Charting ${shown} of ${shown + dropped.length} numeric columns — left out: ${dropped.join(", ")}.`
+    );
+  }
+  notesEl.textContent = lines.join("\n");
+}
+
 function render(parsed: ParsedCsv, sourceTitle?: string): void {
   // A new dataset always starts from a fresh auto-detection (the toggle re-syncs below).
   const detection = detectChart(parsed); // may throw DetectError
@@ -120,7 +133,7 @@ function render(parsed: ParsedCsv, sourceTitle?: string): void {
   state = { parsed, detection, title };
 
   infoEl.textContent = detection.reason;
-  notesEl.textContent = parsed.notes.join("\n");
+  showNotes(parsed, detection);
   resultEl.hidden = false;
   clearStatus();
   renderPreview();
@@ -134,6 +147,8 @@ function setChartType(type: ChartType): void {
     const detection = detectChart(state.parsed, type);
     state = { ...state, detection, title: autoTitle(detection) };
     infoEl.textContent = detection.reason;
+    // Switching to scatter drops every series past the second — re-state what's left out.
+    showNotes(state.parsed, detection);
     clearStatus();
     renderPreview();
     syncToggle(state.parsed, type);
@@ -176,7 +191,8 @@ function handleFile(file: File): void {
       resultEl.hidden = true;
       return;
     }
-    const base = file.name.replace(/\.[^.]+$/, "");
+    // The file name becomes the chart title, and titles land in the exported SVG's markup.
+    const base = scrub(file.name.replace(/\.[^.]+$/, ""));
     handleText(text, base);
   };
   reader.onerror = () => showStatus("Could not read that file.", "error");
