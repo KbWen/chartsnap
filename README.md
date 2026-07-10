@@ -55,9 +55,10 @@ Then pick a size and download. PNG and SVG both, free, no watermark.
 
 ## What it handles
 
-Quoted commas, thousands separators, blank cells (drawn as gaps), big files (sampled
-down with a note), and files that aren't UTF-8 (you get a "re-save as UTF-8" note
-instead of garbled text).
+Quoted commas, US and European numbers (`1,234.56` and `1.234,56`, decided per column),
+dates that mean the same day in every timezone, blank cells (drawn as gaps), big files
+(sampled down with a note), and files that aren't UTF-8 (you get a "re-save as UTF-8"
+note instead of garbled text).
 
 ## What it isn't
 
@@ -65,7 +66,8 @@ instead of garbled text).
   [RAWGraphs](https://github.com/rawgraphs/rawgraphs-app) does that well.
 - No dashboards, accounts, or saved state.
 - Editable titles and labels aren't in yet.
-- Numbers are read US-style (`1,234.56`); European `1.234,56` may come through as text.
+- A lone `3.850` is genuinely ambiguous — 3.85, or 3850 with a European thousands dot?
+  It's read as 3.85 and the chart tells you so. Nothing in the column can settle it.
 - It charts rows as they are — it doesn't sum or group them.
 
 ## Under the hood
@@ -75,8 +77,8 @@ Vite and vanilla TypeScript, [Chart.js](https://www.chartjs.org/) for drawing,
 [canvas2svg](https://github.com/gliffy/canvas2svg) for the vector export. No backend;
 it ships as static files to GitHub Pages.
 
-`npm test` runs the column-detection cases plus an SVG smoke test — the tripwire that
-fails loudly if the vector export ever breaks on a Chart.js update.
+`npm test` runs the column-detection cases, the time-axis date adapter, and an SVG smoke
+test — the tripwire that fails loudly if the vector export ever breaks on a Chart.js update.
 
 ## License
 
