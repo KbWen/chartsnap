@@ -84,6 +84,32 @@ worse than an error message.
       `3.850 … 1.25`. When a separator is *proven* to be a grouping mark
       (`1.234.567`, `3,850,000`), the reading is certain and nothing is said.
 
+## v1.3 — decided 2026-07-10 (clearing the whole "Later" backlog from the audit)
+
+Everything the audit and the expert review left open. Two of these — the offline claim and
+SVG reproducibility — are load-bearing parts of the stated wedge (privacy / offline /
+deterministic), so leaving them unbacked was the worst item on the list.
+
+### Done criteria (v1.3)
+
+- [x] **The offline claim is true.** A service worker precaches the built assets, so the
+      page loads and charts with the network down. Verified by stopping the server and
+      reloading. No new dependency: the worker is generated at build time from the real
+      asset list.
+- [x] **SVG export is byte-reproducible.** The same CSV twice produces identical bytes.
+      (canvas2svg mints random `clipPath` ids; they are renamed deterministically.) PNG
+      already was byte-identical.
+- [x] **No numeric column disappears in silence.** Beyond the 6-series cap (and beyond the
+      2 columns a scatter uses), the chart names the columns it left out.
+- [x] **A blank header row survives** as `Column 1, Column 2 …` instead of being eaten and
+      promoting the first data row to the header. Blank *lines* around the data are still
+      ignored.
+- [x] **A bare 4-digit number is only a year when the header says so** (`year`, `yr`, `年`).
+      A `count` column of `2000, 2010, 2020` is numbers, not a time axis. And a column that
+      *is* bare years labels its axis by year — no more `Feb 2019`, `Aug 2019`.
+- [x] **A control character can't break the export.** C0 chars (illegal in XML) are
+      stripped from names and cells, so the SVG stays well-formed. Tabs/newlines survive.
+
 ## Non-goals / Later / Not now
 
 - NO field/axis mapping or chart-type gallery UI (that is RAWGraphs' turf — we lose if we
@@ -93,11 +119,7 @@ worse than an error message.
 - Later: color/theme presets, .xlsx input, editable chart title/labels
 - Later (surfaced by the review — see DECISIONS): sort categorical bars by value +
   horizontal bars for long labels; aggregate (sum/count) categorical data instead of
-  plotting/sampling raw rows; locale-aware number parsing (EU `1.234,56`); data labels on bars.
-- Later (found 2026-07-10): a `year,value` CSV labels its x axis by month ("Feb 2019",
-  "Aug 2019") because Chart.js only switches to year labels once the span covers
-  `numTicks-1` years. Pin `time.unit: "year"` when the date column was detected from
-  bare 4-digit years.
+  plotting/sampling raw rows; data labels on bars.
 
 ### Found by the 2026-07-10 audit (all pre-existing; ranked by how badly they mislead)
 
@@ -106,24 +128,13 @@ worse than an error message.
    settle renders with a note naming both readings.
 2. ~~`2025-01-01` parsed as UTC midnight but drawn on a local-time axis, so anyone west
    of UTC sees "Dec 31".~~ **Fixed in v1.2**: bare calendar dates are local midnight.
-3. **Data dropped silently.** A 7th numeric column is discarded (`yColumns.slice(0, 6)`)
-   with no note to the user. Either say so in `notes`, or raise the cap.
-4. **The offline claim has nothing behind it.** Nothing registers a service worker, so
-   "works offline after first load" relies on whatever the browser HTTP cache retains
-   (the live Pages cache headers were not measured). Either ship a tiny service worker,
-   or soften the claim — it is one third of the stated wedge.
-5. **SVG export is not byte-reproducible** — canvas2svg mints random `clipPath` ids each
-   run. The drawing is identical; only the ids churn. PNG *is* byte-identical.
-6. A fully blank header row is eaten by `skipEmptyLines: "greedy"`, so the first data row
-   becomes the header and the `Column N` fallback never fires.
-7. **The bare-year heuristic is a footgun** (found by the 2026-07-10 expert review). Any
-   4-digit integer in 1900–2099 is read as a year, so a `count` column of `2000, 2010,
-   2020` becomes a time axis — and `1898, 1899, 1900…` charts differently from `2018,
-   2019, 2020…` because the first two fall outside the window. Consider requiring a
-   temporal-looking header, or monotonicity.
-8. A raw C0 control character in a cell (e.g. NUL) passes into the exported SVG, which is
-   then not well-formed XML and won't open. Fail-closed, never a script path — but strip
-   C0 from labels and it becomes a non-issue.
+3. ~~A 7th numeric column is discarded with no note.~~ **Fixed in v1.3.**
+4. ~~The offline claim has nothing behind it — no service worker.~~ **Fixed in v1.3.**
+5. ~~SVG export is not byte-reproducible (random `clipPath` ids).~~ **Fixed in v1.3.**
+6. ~~A blank header row is eaten, promoting the first data row to the header.~~ **Fixed in v1.3.**
+7. ~~The bare-year heuristic is a footgun: a `count` column of `2000, 2010, 2020` becomes a
+   time axis.~~ **Fixed in v1.3** — a bare year now needs a temporal-looking header.
+8. ~~A raw C0 control char makes the exported SVG unopenable.~~ **Fixed in v1.3.**
 
 ## Tech shape
 
