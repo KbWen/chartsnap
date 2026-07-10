@@ -29,10 +29,7 @@ const previewCanvas = $<HTMLCanvasElement>("preview");
 const presetSelect = $<HTMLSelectElement>("preset");
 const dlPng = $<HTMLButtonElement>("dl-png");
 const dlSvg = $<HTMLButtonElement>("dl-svg");
-const repoLink = $<HTMLAnchorElement>("repo-link");
 const typeButtons = [...document.querySelectorAll<HTMLButtonElement>(".type-btn")];
-
-repoLink.href = "https://github.com/KbWen/chartsnap";
 
 // ---- app state ----------------------------------------------------------
 interface State {
