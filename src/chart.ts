@@ -1,14 +1,41 @@
 import {
+  BarController,
+  BarElement,
+  CategoryScale,
   Chart,
   type ChartConfiguration,
   type ChartDataset,
+  Legend,
+  LinearScale,
+  LineController,
+  LineElement,
   type Plugin,
-  registerables,
+  PointElement,
+  ScatterController,
+  TimeScale,
+  Title,
+  Tooltip,
 } from "chart.js";
-import "chartjs-adapter-date-fns";
+import "./date-adapter";
 import type { Detection, ParsedCsv } from "./types";
 
-Chart.register(...registerables);
+// Register only what the three chart types need. `...registerables` would also pull in
+// pie/doughnut/radar/polarArea/bubble, the radial + logarithmic scales, Filler and
+// Decimation — none of which chartsnap can render (SPEC rules out a chart gallery).
+Chart.register(
+  BarController,
+  LineController,
+  ScatterController,
+  BarElement,
+  LineElement,
+  PointElement,
+  CategoryScale,
+  LinearScale,
+  TimeScale,
+  Legend,
+  Title,
+  Tooltip
+);
 
 // canvas2svg's font parser rejects quoted/numeric family names, so use a
 // quote-free, digit-free stack. It still renders nicely on canvas + PNG.
