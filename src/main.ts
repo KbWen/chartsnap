@@ -302,6 +302,16 @@ dlSvg.addEventListener(
   })
 );
 
+// ---- offline ------------------------------------------------------------
+// Precaches the built assets so the page works with the network down. It backs a claim the
+// README makes, so it registers on every production load — but a failure here must never
+// cost the user their chart, hence the silent catch.
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    void navigator.serviceWorker.register("./sw.js").catch(() => undefined);
+  });
+}
+
 // ---- dev-only test bridge (stripped from production build) ---------------
 if (import.meta.env.DEV) {
   (window as Window & { __cs?: unknown }).__cs = {
