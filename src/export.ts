@@ -94,6 +94,23 @@ function patchSvgCtx(ctx: Record<string, unknown>): void {
   }
 }
 
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * canvas2svg names each clipPath with a fresh random string, so the same CSV exported twice
+ * produced different bytes. Rename them in document order. Only ids introduced on a
+ * <clipPath> are touched, so a user's own label can never be rewritten by accident.
+ */
+function stableClipIds(svg: string): string {
+  const ids = [...new Set([...svg.matchAll(/<clipPath id="([^"]+)"/g)].map((m) => m[1]))];
+  return ids.reduce((out, id, i) => {
+    const esc = escapeRe(id);
+    return out
+      .replace(new RegExp(`<clipPath id="${esc}"`, "g"), `<clipPath id="cs${i}"`)
+      .replace(new RegExp(`url\\(#${esc}\\)`, "g"), `url(#cs${i})`);
+  }, svg);
+}
+
 /** Build the raw SVG markup for the chart at preset size (true vector, no raster). */
 export function renderSvgString(
   parsed: ParsedCsv,
@@ -133,10 +150,11 @@ export function renderSvgString(
     );
     // Inject an opaque background as the first child (document order = behind),
     // matching the raster export's warm background.
-    return raw.replace(
+    const withBg = raw.replace(
       /(<svg[^>]*>)/,
       `$1<rect x="0" y="0" width="${preset.width}" height="${preset.height}" fill="${EXPORT_BG}"/>`
     );
+    return stableClipIds(withBg);
   } finally {
     chart.destroy();
   }
