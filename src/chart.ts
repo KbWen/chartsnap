@@ -248,6 +248,9 @@ export function buildConfig(
         scales: {
           x: {
             type: "time",
+            // A `year,value` CSV otherwise labels ticks "Feb 2019", "Aug 2019" — Chart.js
+            // only picks year labels once the span covers numTicks-1 years.
+            ...(detection.yearAxis ? { time: { unit: "year" as const } } : {}),
             grid: { display: false },
             border: noBorder,
             ticks: ticks({ maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }),

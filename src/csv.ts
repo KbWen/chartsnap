@@ -138,7 +138,14 @@ function numberWarning(column: string, style: NumberStyle): string | null {
 /** "2019", "2025-01", "2025-01-05" — a calendar date carrying no time and no offset. */
 const CALENDAR_DATE = /^(\d{4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?$/;
 
-function cleanTime(s: string): number {
+/**
+ * A bare 4-digit number only means a year when the header says it does. Otherwise a
+ * `count` column of 2000, 2010, 2020 turns into a time axis, and 1898 charts differently
+ * from 2018 purely because it falls outside the plausible-year window.
+ */
+const YEAR_HEADER = /(^|[^a-z])(year|yr|years)([^a-z]|$)|年/i;
+
+function cleanTime(s: string, bareYearOk: boolean): number {
   const t = s.trim();
   if (t === "") return NaN;
 
@@ -148,8 +155,8 @@ function cleanTime(s: string): number {
   const cal = CALENDAR_DATE.exec(t);
   if (cal) {
     const year = Number(cal[1]);
-    // A bare 4-digit number is a year only if it plausibly is one; else it's a count or id.
-    if (cal[2] === undefined && (year < 1900 || year > 2099)) return NaN;
+    const bare = cal[2] === undefined;
+    if (bare && (!bareYearOk || year < 1900 || year > 2099)) return NaN;
     const month = Number(cal[2] ?? 1) - 1;
     const day = Number(cal[3] ?? 1);
     const d = new Date(year, month, day);
@@ -164,26 +171,35 @@ function cleanTime(s: string): number {
   return Number.isNaN(ms) ? NaN : ms;
 }
 
-function classify(raw: string[]): {
+function classify(
+  raw: string[],
+  name: string
+): {
   type: ColumnType;
   nums: number[];
   times: number[];
   style: NumberStyle;
+  bareYears: boolean;
 } {
   const style = detectNumberStyle(raw);
+  const bareYearOk = YEAR_HEADER.test(name);
   const nums = raw.map((v) => toNumber(v, style.format));
-  const times = raw.map(cleanTime);
+  const times = raw.map((v) => cleanTime(v, bareYearOk));
   const nonEmpty = raw.filter((v) => v.trim() !== "").length;
+  // Only a column made *entirely* of bare years earns a year-ticked axis.
+  const bareYears =
+    bareYearOk && nonEmpty > 0 && raw.every((v) => v.trim() === "" || /^\d{4}$/.test(v.trim()));
 
-  if (nonEmpty === 0) return { type: "empty", nums, times, style };
+  const base = { nums, times, style, bareYears };
+  if (nonEmpty === 0) return { type: "empty", ...base };
 
   const numHits = nums.filter((n) => !Number.isNaN(n)).length;
   const timeHits = times.filter((t) => !Number.isNaN(t)).length;
 
   // Prefer date over number so an ISO date column isn't read as a category.
-  if (timeHits / nonEmpty >= TYPE_THRESHOLD) return { type: "date", nums, times, style };
-  if (numHits / nonEmpty >= TYPE_THRESHOLD) return { type: "number", nums, times, style };
-  return { type: "category", nums, times, style };
+  if (timeHits / nonEmpty >= TYPE_THRESHOLD) return { type: "date", ...base };
+  if (numHits / nonEmpty >= TYPE_THRESHOLD) return { type: "number", ...base };
+  return { type: "category", ...base };
 }
 
 /** Evenly pick `target` indices spanning [0, n). Keeps first & last. */
@@ -195,12 +211,26 @@ function sampleIndices(n: number, target: number): number[] {
   return Array.from(new Set(out));
 }
 
+/**
+ * C0 control characters are illegal in XML, and every label ends up inside the exported
+ * SVG's <text> nodes — one NUL in a cell makes the whole file refuse to open. Tab, newline
+ * and carriage return are legal and stay.
+ */
+const XML_ILLEGAL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
+export const scrub = (s: string): string => s.replace(XML_ILLEGAL, "");
+
+/** A line that carried no fields at all — a truly blank line, not a row of blank cells. */
+const isBlankLine = (row: string[]): boolean => row.length <= 1 && !(row[0] ?? "").trim();
+const isAllEmpty = (row: string[]): boolean => row.every((c) => !(c ?? "").trim());
+
 export function parseCsv(text: string): ParsedCsv {
   const notes: string[] = [];
 
   const result = Papa.parse<string[]>(text, {
     header: false,
-    skipEmptyLines: "greedy",
+    // NOT "greedy": that eats a header row of blank names (",,"), quietly promoting the
+    // first data row to the header. We drop blank lines ourselves, just below.
+    skipEmptyLines: false,
     // Keep everything as strings; we do our own typed coercion.
     dynamicTyping: false,
   });
@@ -216,7 +246,14 @@ export function parseCsv(text: string): ParsedCsv {
     }
   }
 
-  const rows = result.data.filter((r) => r.length > 0);
+  // Blank *lines* (before, between, after the data) carry no fields and are noise. A row of
+  // blank *cells* has structure: as the first row it is a header with unnamed columns, and
+  // anywhere else it is an empty data row we can drop.
+  const rows = result.data
+    .filter((r) => r.length > 0 && !isBlankLine(r))
+    .filter((r, i) => i === 0 || !isAllEmpty(r))
+    .map((r) => r.map((cell) => scrub(cell ?? "")));
+
   if (rows.length < 2) {
     throw new CsvError("Need a header row plus at least one data row.");
   }
@@ -243,7 +280,7 @@ export function parseCsv(text: string): ParsedCsv {
 
   const columns: Column[] = header.map((name, c) => {
     const raw = body.map((row) => row[c] ?? "");
-    const { type, nums, times, style } = classify(raw);
+    const { type, nums, times, style, bareYears } = classify(raw, name);
     // A self-contradicting column often falls short of the numeric threshold and drops to
     // "category" — say why, rather than letting it vanish from the chart unexplained.
     const worthSaying = type === "number" || (type === "category" && style.warn?.kind === "mixed");
@@ -251,7 +288,7 @@ export function parseCsv(text: string): ParsedCsv {
       const warning = numberWarning(name, style);
       if (warning) notes.push(warning);
     }
-    return { name, type, raw, nums, times };
+    return { name, type, raw, nums, times, bareYears };
   });
 
   return {

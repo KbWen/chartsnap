@@ -2,6 +2,11 @@ import type { ChartType, Column, Detection, ParsedCsv } from "./types";
 
 export class DetectError extends Error {}
 
+/** More than a handful of series turns a shareable chart into spaghetti. */
+const MAX_SERIES = 6;
+
+const names = (cols: Column[]): string[] => cols.map((c) => c.name);
+
 interface Cols {
   dates: Column[];
   numbers: Column[];
@@ -66,6 +71,9 @@ export function detectChart(parsed: ParsedCsv, force?: ChartType): Detection {
       xColumn: xc,
       yColumns: [xc, yc],
       timeAxis: false,
+      // A scatter uses exactly two columns; any others are plotted nowhere.
+      droppedSeries: names(c.numbers.slice(2)),
+      yearAxis: false,
       reason: forced
         ? `Scatter: "${yc.name}" vs "${xc.name}".`
         : `Two numeric columns ("${xc.name}" vs "${yc.name}") → scatter plot.`,
@@ -78,7 +86,9 @@ export function detectChart(parsed: ParsedCsv, force?: ChartType): Detection {
       ? (c.dates[0] ?? c.categories[0] ?? indexColumn(parsed.rowCount))
       : (c.categories[0] ?? c.dates[0] ?? indexColumn(parsed.rowCount));
   const timeAxis = type === "line" && x.type === "date";
-  const yColumns = c.numbers.slice(0, 6);
+  const yColumns = c.numbers.slice(0, MAX_SERIES);
+  const droppedSeries = names(c.numbers.slice(MAX_SERIES));
+  const yearAxis = timeAxis && x.bareYears === true;
 
   let reason: string;
   if (forced) {
@@ -91,5 +101,5 @@ export function detectChart(parsed: ParsedCsv, force?: ChartType): Detection {
     reason = `One numeric column ("${c.numbers[0].name}") → bar chart by row.`;
   }
 
-  return { type, xColumn: x, yColumns, timeAxis, reason };
+  return { type, xColumn: x, yColumns, timeAxis, droppedSeries, yearAxis, reason };
 }

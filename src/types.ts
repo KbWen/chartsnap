@@ -9,6 +9,8 @@ export interface Column {
   nums: number[];
   /** Parsed timestamps in ms (NaN where unparseable). Only meaningful for type "date". */
   times: number[];
+  /** True when this date column came from bare 4-digit years, so the axis can label by year. */
+  bareYears?: boolean;
 }
 
 export interface ParsedCsv {
@@ -31,6 +33,10 @@ export interface Detection {
   yColumns: Column[];
   /** True when the x axis is a real time scale (line only). */
   timeAxis: boolean;
+  /** Numeric columns present but not plotted — named to the user so nothing vanishes quietly. */
+  droppedSeries: string[];
+  /** True when the time axis spans bare years, so it should tick once per year. */
+  yearAxis: boolean;
   /** Short plain-language reason, shown to the user. */
   reason: string;
 }

@@ -122,7 +122,8 @@ describe("calendar dates are local midnight, in every timezone", () => {
     }
   };
 
-  const firstTime = (cell: string) => parseCsv(`d,v\n${cell},1\n2030-06-15,2`).columns[0].times[0];
+  const firstTime = (cell: string, header = "d") =>
+    parseCsv(`${header},v\n${cell},1\n2030-06-15,2`).columns[0].times[0];
 
   for (const tz of ["UTC", "America/New_York", "America/Los_Angeles", "Asia/Taipei"]) {
     it(`${tz}: "2025-01-01" is midnight on Jan 1, not the day before`, () => {
@@ -136,7 +137,7 @@ describe("calendar dates are local midnight, in every timezone", () => {
 
   it("applies to year-only and year-month cells too", () => {
     withTz("America/Los_Angeles", () => {
-      const y = new Date(firstTime("2019"));
+      const y = new Date(firstTime("2019", "year"));
       expect([y.getFullYear(), y.getMonth(), y.getDate(), y.getHours()]).toEqual([2019, 0, 1, 0]);
       const ym = new Date(firstTime("2025-03"));
       expect([ym.getFullYear(), ym.getMonth(), ym.getDate(), ym.getHours()]).toEqual([2025, 2, 1, 0]);
