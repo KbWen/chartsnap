@@ -60,6 +60,10 @@ dates that mean the same day in every timezone, blank cells (drawn as gaps), big
 (sampled down with a note), and files that aren't UTF-8 (you get a "re-save as UTF-8"
 note instead of garbled text).
 
+It works offline once you've loaded it — a service worker keeps the page and its assets
+on your machine. The same CSV always produces the same chart, down to identical bytes in
+the exported PNG and SVG. If a numeric column doesn't fit on the chart, it says which.
+
 ## What it isn't
 
 - Not a chart builder. No axis/field editor — if you need to wire things up by hand,
