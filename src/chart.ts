@@ -73,6 +73,35 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
 }
 
+const DAY_MS = 86_400_000;
+
+/**
+ * Pick the tick unit from how far apart the data actually is.
+ *
+ * Chart.js picks it from the axis *span* instead, and for a monthly series it lands on "day":
+ * twelve points on the 1st of each month get labelled "Jan 1, Feb 12, Mar 26, May 7…" — only
+ * the first of which is a date in the file. v1.3 fixed exactly this for bare years and left
+ * every other spacing alone.
+ *
+ * Deliberately narrow: only months and coarser. Days and weeks sit on the same fixed grid that
+ * day-ticks step along, so they already land on real points — docs/hero.png is weekly and is
+ * correct today. Forcing "week" would snap ticks to week starts and could label a day the data
+ * has nothing on, which is a regression wearing a fix's clothes.
+ */
+function tickUnit(times: number[]): "month" | "quarter" | "year" | undefined {
+  const sorted = times.filter((t) => !Number.isNaN(t)).sort((a, b) => a - b);
+  if (sorted.length < 2) return undefined;
+  const gaps: number[] = [];
+  for (let i = 1; i < sorted.length; i++) gaps.push(sorted[i] - sorted[i - 1]);
+  gaps.sort((a, b) => a - b);
+  // Median, so one missing month or one duplicated timestamp can't decide the axis.
+  const median = gaps[gaps.length >> 1];
+  if (median >= 300 * DAY_MS) return "year";
+  if (median >= 80 * DAY_MS) return "quarter";
+  if (median >= 26 * DAY_MS) return "month"; // 26: a 28-day February still counts as monthly
+  return undefined;
+}
+
 export interface BuildOpts {
   title: string;
   /** Target pixel size; used to scale fonts so large exports stay legible. */
@@ -94,13 +123,27 @@ export function buildConfig(
   detection: Detection,
   opts: BuildOpts
 ): ChartConfiguration {
-  const fontScale = clamp(Math.min(opts.width, opts.height) / 700, 1, 4);
-  const px = (n: number) => Math.round(n * fontScale);
+  // Geometry — padding, point radius, rule widths, bar caps — keeps the short-edge scale it
+  // was tuned against, and looks right.
+  const scale = clamp(Math.min(opts.width, opts.height) / 700, 1, 4);
+  const px = (n: number) => Math.round(n * scale);
+
+  // Type gets its own, because only type has to survive being *posted*. Keying it off the
+  // short edge made landscape the worst case: a 1200×675 Twitter card scored 1 — 12px ticks,
+  // a 25px title, 1% and 2% of its width — and a Twitter card renders ~500px wide in a feed,
+  // so those posted as ~5px. Width-based with a floor puts every social preset at ~2% ticks
+  // and ~4% title; the ceiling still belongs to A4, where the constraint is a 300-DPI sheet.
+  //
+  // These were one scale until 2026-07-16, and sharing it is a trap: raising it for legibility
+  // inflated the dots and rules too, and turned a restrained chart into a chunky one. The
+  // numbers said 2% and looked fine — the rendered PNG did not.
+  const fontScale = clamp(opts.width / 600, 1.6, 4);
+  const fpx = (n: number) => Math.round(n * fontScale);
   const font = {
-    title: px(25),
-    axis: px(12),
-    ticks: px(12),
-    legend: px(12.5),
+    title: fpx(25),
+    axis: fpx(12),
+    ticks: fpx(12),
+    legend: fpx(12.5),
   };
   const multiSeries = detection.yColumns.length > 1 && detection.type !== "scatter";
 
@@ -248,9 +291,13 @@ export function buildConfig(
         scales: {
           x: {
             type: "time",
-            // A `year,value` CSV otherwise labels ticks "Feb 2019", "Aug 2019" — Chart.js
-            // only picks year labels once the span covers numTicks-1 years.
-            ...(detection.yearAxis ? { time: { unit: "year" as const } } : {}),
+            // Left to itself Chart.js labels a monthly series by day — "Feb 12", "Mar 26" —
+            // on dates the file has no data for. yearAxis stays explicit: a column of bare
+            // years knows what it is regardless of how the rows happen to be spaced.
+            ...(() => {
+              const unit = detection.yearAxis ? ("year" as const) : tickUnit(x.times);
+              return unit ? { time: { unit } } : {};
+            })(),
             grid: { display: false },
             border: noBorder,
             ticks: ticks({ maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }),

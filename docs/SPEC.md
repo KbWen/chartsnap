@@ -258,7 +258,7 @@ number that increments faster than the ideas behind it is just a counter.
       impossible on the one most visitors bring. Desktop verified untouched at 1280px.
       Nothing overflowed at 375px before the change either — that part of the review didn't
       survive measurement, and is recorded here rather than quietly dropped.
-- [ ] **A time axis is labelled with the data's own dates.** The tick unit follows the data's
+- [x] **A time axis is labelled with the data's own dates.** The tick unit follows the data's
       spacing instead of being left to Chart.js, which picks `unit: "day"` for *every* monthly
       series — measured at 3, 6 and 12 points, all `day`. Today the bundled `monthly-sales.csv`,
       the front-page sample and the README hero's sibling, renders
@@ -277,7 +277,7 @@ number that increments faster than the ideas behind it is just a counter.
       shape that cannot show the bug.
       **Verified by looking at the rendered PNG**, not by asserting `timeAxis === true` — which
       is true today, and true while the axis is wrong.
-- [ ] **A posted chart is legible at the size it is posted at.** `fontScale` is
+- [x] **A posted chart is legible at the size it is posted at.** `fontScale` is
       `clamp(min(w,h)/700, 1, 4)`, which puts a Twitter card's ticks at 12px on a 1200px-wide
       image — **1% of the width** — and its title at 25px, ~2%. Look at any export and the title
       reads as a footnote in the corner; `docs/hero.png` has the same problem at 2400px wide.
