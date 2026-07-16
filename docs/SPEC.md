@@ -236,12 +236,19 @@ because 100 is not a 4-digit year.
       `or` branch here: it would take the 240 kB precache into the megabytes and fight the
       offline third of the wedge to strengthen the deterministic third.
 
-## v1.5 — mobile, pulled ahead of the rest of the backlog (decided 2026-07-16)
+## v1.5 — the things you only find by looking (decided 2026-07-16)
 
-Ranked ahead of the remaining parser work because P(a real user hits it) ≈ 1.0, versus ≈ 0 for
-the encoding edge cases. The tool's headline is "a chart you can post"; `grep -c "@media"
-src/style.css` returns **0**; and on the device people actually post from, the export is a dead
-end. Two independent adversaries reached this ordering without being asked to.
+Started as "mobile", pulled ahead of the remaining parser work because P(a real user hits it)
+≈ 1.0 versus ≈ 0 for the encoding edge cases: the headline is "a chart you can post",
+`grep -c "@media" src/style.css` returned **0**, and on the device people post from the export
+was a dead end. Two independent adversaries reached that ordering without being asked to.
+
+It grew — and got its real name — when someone finally opened the PNG. **Every remaining item
+here is a defect that 16 reviewers, 120 green tests and a session of measurements could not
+see, because all of them were reading code or checking numbers about the output rather than
+looking at the output.** Kept as v1.5 rather than opened as a v1.6: it is the same discovery
+method and the same surface (the exported artifact), the release is not finished, and a version
+number that increments faster than the ideas behind it is just a counter.
 
 - [x] **The page works on a phone.** A `@media` block exists. Measured at 375px, before → after:
       `.chip` 27→44, `.type-btn` 25→44, `.btn` 36→44, the paste box 13.6px→16px (below 16, iOS
@@ -251,17 +258,40 @@ end. Two independent adversaries reached this ordering without being asked to.
       impossible on the one most visitors bring. Desktop verified untouched at 1280px.
       Nothing overflowed at 375px before the change either — that part of the review didn't
       survive measurement, and is recorded here rather than quietly dropped.
-- [ ] **The preview is legible on a phone.** NOT DONE, and the diagnosis in the first draft of
-      this criterion was wrong, so it is split out rather than ticked. It blamed `previewSize`
-      capping at 1400 bitmap px. But a 1200×675 export displayed at 312 CSS px genuinely *is*
-      3.1px text — the preview is an honest scaled view of the export, and any image viewer
-      would show the same. Which surfaces the real defect: `fontScale` is
-      `clamp(min(w,h)/700, 1, 4)`, so a Twitter card's ticks are 12px on a 1200px-wide image —
-      **1% of the width**. A Twitter card renders at ~500px on a phone, so the *posted* chart's
-      labels are ~5px there too. The preview isn't lying; it is telling us the export is sized
-      for a monitor. Fixing it means raising the export's font floor (a data-viz change to the
-      shareable artifact, needs its own criterion and a look at every preset), not rescaling
-      the preview — which would make the preview lie to hide it.
+- [ ] **A time axis is labelled with the data's own dates.** The tick unit follows the data's
+      spacing instead of being left to Chart.js, which picks `unit: "day"` for *every* monthly
+      series — measured at 3, 6 and 12 points, all `day`. Today the bundled `monthly-sales.csv`,
+      the front-page sample and the README hero's sibling, renders
+      `Jan 1, Feb 12, Mar 26, May 7, Jun 18, Jul 30, Sep 10, Oct 22` for 12 points that sit on
+      the 1st of each month: only the first label is a data point. At 3 points it renders
+      `Jan 1, Jan 9 … Feb 26` — 8-day ticks — and Mar 1 falls past the last label entirely.
+      v1.3 fixed exactly this for bare years by setting `time.unit` when `yearAxis` is true
+      (`chart.ts:253`) and left months untouched.
+      **After:** monthly data ticks by month (`Jan 2025, Feb 2025 …`), and every label names a
+      date the data actually has.
+      **Must keep working, and this is the whole risk:** `docs/hero.png`'s weekly data is
+      correct *today* — weekly points sit on the same fixed 7-day grid that day-unit ticks use,
+      so its 14-day ticks land on every second point. Daily, weekly, quarterly and yearly data
+      must each still label sensibly; a fixture pins one of each, run before the change. The
+      hero is why this survived four releases: the only chart anyone ever looked at was the one
+      shape that cannot show the bug.
+      **Verified by looking at the rendered PNG**, not by asserting `timeAxis === true` — which
+      is true today, and true while the axis is wrong.
+- [ ] **A posted chart is legible at the size it is posted at.** `fontScale` is
+      `clamp(min(w,h)/700, 1, 4)`, which puts a Twitter card's ticks at 12px on a 1200px-wide
+      image — **1% of the width** — and its title at 25px, ~2%. Look at any export and the title
+      reads as a footnote in the corner; `docs/hero.png` has the same problem at 2400px wide.
+      A Twitter card renders at ~500px on a phone, so a posted chart's labels land at ~5px.
+      **This criterion started life as "the preview is legible on a phone" and that diagnosis
+      was wrong**, which is why it is worth keeping the history: it blamed `previewSize` capping
+      at 1400 bitmap px, but a 1200×675 export shown at 312 CSS px genuinely *is* 3.1px text —
+      the preview is an honest scaled view and any image viewer agrees. The preview was never
+      lying; it was reporting that the export is sized for a monitor. Rescaling the preview would
+      have made it lie to hide the real defect, and would have ticked the box.
+      **After:** a floor on type size relative to the image's short edge, checked across every
+      preset (Twitter, IG post, IG story, A4) — the A4 case runs the other way, where `fontScale`
+      pins near its ceiling and the constraint is print, not a phone.
+      **Verified by looking**, at every preset, at the size each is actually consumed at.
 - [x] **The export reaches the camera roll.** `navigator.share({ files: [...] })` behind a
       `navigator.canShare` gate, with `downloadBlob` as the desktop fallback — so the PNG goes
       Photos → Instagram in one tap instead of landing in Files with no route out. An IG Story
