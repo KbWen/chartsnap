@@ -9,6 +9,7 @@
   --line-strong: #d6cfbc;
   --accent: #155e4c; /* deep pine — the one signature colour, used sparingly */
   --accent-tint: #ecf1ee;
+  --accent-ink: #faf8f2; /* light ink for text on the pine fill — same as .btn-primary's */
   --danger: #a23a1e;
   --danger-bg: #fbf1ec;
   --info-ink: #235e6f;
@@ -250,7 +251,9 @@ main {
 .notes {
   margin: 0 0 16px;
   font-family: var(--font-mono);
-  color: var(--faint);
+  /* --muted (5.19:1), not --faint (3.00:1, fails AA at this size). These lines are the only
+     warning that a chart may be wrong — an unreadable warning is not a warning. */
+  color: var(--muted);
   font-size: 0.8rem;
   white-space: pre-line;
 }
