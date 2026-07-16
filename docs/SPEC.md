@@ -331,6 +331,120 @@ number that increments faster than the ideas behind it is just a counter.
       byte-identical and never reaches offline users. Hash the whole precache manifest first, or
       this criterion ships to nobody.
 
+## v1.6 — the output excludes people (drafted 2026-07-16, NOT READY TO BUILD)
+
+The gap is real: a blind person gets nothing from this tool, a black-and-white printer merges
+two of six series, and four bits of UI sit below the contrast floor. Those were listed as
+"known limits" at the end of v1.5, which was a way of not doing them.
+
+**A first draft of four criteria was written and then audited by a screen-reader user, a WCAG
+engineer and a SPEC auditor. All four failed** — and two were the wrong criterion, not the wrong
+detail. The draft is in git history; the audit is below, because what it found is worth more than
+the draft was. **Nothing here is built. Do not tick anything until it is rewritten.**
+
+### What the audit found (each verified by an executed run)
+
+- **The "B&W printer" criterion cannot deliver its own headline, and is withdrawn.** Its real
+  mechanism is a dash ramp — 12 luma levels is 4.7% of the range and a halftone does not keep
+  that. But `canvas2svg` has no `setLineDash` (`typeof ctx.setLineDash === "undefined"`), and
+  `export.ts:88-96` shims it to stash the array on `__dash` and hand it back — so Chart.js is
+  satisfied, `getLineDash()` returns `[6,4]`, nothing throws, and the emitted SVG has **no
+  `stroke-dasharray`**: every vector line is solid. The fix would work in the PNG and vanish
+  from the format you take to a printer. And `chart.ts:397` sets `borderWidth: 0` on bars, so a
+  bar dash is a structural no-op — bars, the most common chart this tool draws, can never carry
+  a second channel at all. Delivering the headline needs surgery on an unmaintained library's
+  serializer plus a pattern-fill story for bars. That is a release, not a criterion. **Later.**
+- **The one colour that provably excludes people is `#cf8636`** — series 2, measured **2.90:1**
+  on `EXPORT_BG`, below WCAG 1.4.11's 3:1 for graphical objects. The draft froze it as "the
+  signature, does not move". `#cb8335` measures 3.02:1 and is visually indistinguishable. That
+  is a real one-hex criterion and it survives, below.
+- **A contrast test cannot be computed from CSS in this repo.** Measured on the pinned jsdom
+  29.1.1: `getComputedStyle().color` returns the literal `"var(--faint)"`, `font-size` returns
+  `"0.82rem"` (so the 4.5-vs-3.0 threshold is unknowable), and an ancestor with
+  `background: var(--card)` computes to `rgba(0,0,0,0)` — so "what is behind this text" returns
+  nothing, for every node. Even with a perfect CSS parser it stays undecidable: the backdrop is
+  a fact about the DOM tree, not the stylesheet. A real test needs a browser engine — a new
+  dependency, a CI browser download, a Rule 4 vetting. **That is the decision the criterion
+  turns on, and it must be made before the criterion is written, not during.**
+- **`--faint` `#948d7c` fails AA** (3.00:1 on paper, 3.27:1 on card) on four things
+  (`style.css:117, 279, 404, 414`). The arithmetic nobody had done: AA on `--paper` needs
+  L* <= 47.26, and `--muted` sits at L* 43.38 — so **the entire space for a compliant third tier
+  is 3.88 L* wide**, where today's step is 15.41. A compliant `--faint` (`#746e61`, 4.61:1) is a
+  nudge, not a tier. The three-step hierarchy does not survive a 4.5:1 floor on near-white paper
+  via lightness alone; that is arithmetic, not taste. Either move `--muted` down as well
+  (`#5e584b`, 6.42:1 — every existing use gains contrast, nothing regresses) or accept two tiers.
+  **A decision, not a fix.**
+- **`chart.ts` carries a second, different `muted`** — `THEME.muted` `#6f6a5f` (`chart.ts:54`)
+  versus CSS `--muted` `#6c6659` (`style.css:6`). Same name, different value. Any test scoped to
+  "the stylesheet" validates one and never sees the other — and the chart's ticks, axis titles
+  and legend are text, in the artifact, outside the stylesheet.
+- **`textContent` cannot assert accessibility.** Measured: a `display:none` table, an
+  `aria-hidden="true"` table and a correct visually-hidden table return **identically** from
+  `document.body.textContent`. The draft's property — "every value appears in the DOM" — passed
+  for both implementations the same criterion forbade. Substring checks false-pass as well: on
+  the text "Revenue over 2018-2025", `includes("18")`, `includes("25")` and `includes("5")` are
+  all true.
+- **`detection.yColumns` excludes `xColumn`** for line and bar: `classify()` (`detect.ts:16-23`)
+  filters on disjoint types, so the two sets cannot overlap. A property asserting only
+  `yColumns` is satisfied by a table of six unlabelled number columns. Scatter is the reverse —
+  `detect.ts:72` puts `xColumn` *inside* `yColumns`. One property, two incompatible meanings.
+- **The draft's `#status` "after" state was already true.** `index.html:67` ships the node;
+  `hidden` removes it from the *accessibility tree*, not the DOM. The criterion described its own
+  before-state. And it named `#notes` while fixing only `#status`: `.notes:empty
+  { display: none }` (`style.css:261`) removes `#notes` from the tree exactly when a live region
+  needs registering, and `render()` writes it at `main.ts:139` *before* `main.ts:140` unhides its
+  ancestor — the identical bug, in the element the criterion named.
+- **"Errors announce more loudly than notes" is not a thing.** There is polite and assertive, not
+  volume; one node cannot be both, and flipping `role` at runtime races the write. Two permanent
+  regions is the known-good pattern. Worse, the clause protected a behaviour that does not work
+  today — errors do not announce at all, as this SPEC's own v1.5 review records — so it was a new
+  requirement wearing must-keep-working clothes. **Fifth instance of the trap recorded four times
+  on 2026-07-16.**
+
+### The rule this draft broke, in its own words
+
+The section header claimed *"every criterion below names what must keep working, its numbers were
+produced by running the current code, and each is asserted as a property"*. The numbers were real
+— every measurement reproduced exactly. **The assertions were not.** As the audit put it: the
+section did the measuring and not the asserting, and "asserted as a property" became vocabulary
+applied to four things that are not properties. AGENTS.md gained that rule the same day this draft
+was written. **Learning a rule's words is not learning its method** — and the tell is always the
+same: the fixture was derived from the change rather than from a run.
+
+### Done criteria (v1.6) — to be rewritten before any code
+
+The audit produced concrete replacements; adopt them rather than redrafting from scratch. The
+shape all three reviewers agree on:
+
+- [ ] **The chart's title exists outside the pixels.** Asserted on all three title paths — file
+      (scrubbed filename), paste (`autoTitle`), chip (literal) — which differ, so a test that
+      hardcodes one goes red on the other two. Must keep working: PNG and SVG bytes unchanged at
+      every preset (`png.test.ts` and `reproducibility.test.ts` pin them today).
+- [ ] **A screen reader can read the plotted numbers.** A visually-hidden table whose rows are
+      built from the same data `buildConfig` hands Chart.js — so scatter's NaN skips
+      (`chart.ts:228`), the time-axis sort (`:282`) and dropped rows (`:279`) cannot diverge from
+      it — plus a one-sentence summary, because 1,000 rows x 7 columns is 7,000 NVDA keypresses
+      and the job is *vouching for a chart before sending it*, not studying data. Asserted
+      positionally against those datasets, never with `textContent.includes`. **Negative control
+      required:** a test that sets the table `display:none` and expects the assertion to go red.
+- [ ] **A render is announceable.** Two permanent live regions, outside anything ever `hidden` or
+      `:empty { display: none }`. Asserted as the invariant rather than the speech: at no observed
+      moment does a status element satisfy `textContent !== "" && (hidden || display === "none")`
+      — checkable in jsdom, and **it goes red against today's code**. The word "announces" is
+      earned by one NVDA and one VoiceOver pass recorded in LAUNCH.md, never by a green suite.
+- [ ] **Series 2 clears the graphical-object floor.** `#cf8636` -> `#cb8335`: 2.90:1 -> 3.02:1 on
+      `EXPORT_BG`, a 3.1-luma move. Must keep working: it still reads as the same ochre beside the
+      pine, and `reproducibility.test.ts` stays green.
+- [ ] **`--faint` stops failing AA** — by whichever of the two decisions above is taken.
+
+**Prerequisite for the whole section:** the dropzone is a `<section>` with an accessible name
+(`index.html:34-39`), i.e. a *region landmark*, announced as scenery — and `<input id="file"
+hidden>` is not focusable, so a screen-reader user's only route to their own CSV is the paste box.
+Making the output readable for someone who cannot open the input is the theme contradicting
+itself. It is one line: `<button type="button">`, after which the Enter/Space shim at
+`main.ts:216-221` deletes itself. Note `role="button"` takes presentational children, so
+`.drop-sub`'s paste hint must fold into the accessible name.
+
 ## Non-goals / Later / Not now
 
 - NO field/axis mapping or chart-type gallery UI (that is RAWGraphs' turf — we lose if we
