@@ -138,6 +138,30 @@ function numberWarning(column: string, style: NumberStyle): string | null {
 /** "2019", "2025-01", "2025-01-05" — a calendar date carrying no time and no offset. */
 const CALENDAR_DATE = /^(\d{4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?$/;
 
+const MONTH_NAME =
+  "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t)?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?";
+
+/**
+ * The only shapes allowed to reach `Date.parse`.
+ *
+ * `Date.parse` is spec-defined for ISO 8601 and engine-defined for everything else, and the
+ * engine-defined half guesses silently: "Jan-25" (Excel's default) becomes 25 Jan 2001,
+ * "45%" becomes 2045-01-01 and takes over the x axis, "114/01/05" (民國) becomes year 114 AD.
+ * Dropping `Date.parse` would take ISO instants with it — and with them every timestamped
+ * export on earth, which would fall to a category and be drawn as equal-width bars. So gate
+ * its *input* instead. Anything not listed here is a category: honest, and deterministic.
+ */
+const PARSEABLE: RegExp[] = [
+  // 2025-01-01T09:30:00Z / +08:00 / no offset (local, per ECMA-262 — what a spreadsheet
+  // means), and the space-separated form Excel and SQL exports write.
+  /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/i,
+  // Year-first slash dates: unambiguous, unlike 01/02/2025 (see SPEC "Later").
+  /^\d{4}\/\d{1,2}\/\d{1,2}$/,
+  new RegExp(`^(?:${MONTH_NAME})\\.? \\d{4}$`, "i"), // March 2025
+  new RegExp(`^\\d{1,2} (?:${MONTH_NAME})\\.? \\d{4}$`, "i"), // 5 January 2025
+  new RegExp(`^(?:${MONTH_NAME})\\.? \\d{1,2}, ?\\d{4}$`, "i"), // Jan 5, 2025
+];
+
 /**
  * A bare 4-digit number only means a year when the header says it does. Otherwise a
  * `count` column of 2000, 2010, 2020 turns into a time axis, and 1898 charts differently
@@ -167,6 +191,8 @@ function cleanTime(s: string, bareYearOk: boolean): number {
 
   // Don't let bare numbers (counts, ids) masquerade as dates.
   if (/^-?\d+(\.\d+)?$/.test(t)) return NaN;
+  // Everything else must look like something we recognise before Date.parse may guess at it.
+  if (!PARSEABLE.some((re) => re.test(t))) return NaN;
   const ms = Date.parse(t);
   return Number.isNaN(ms) ? NaN : ms;
 }
