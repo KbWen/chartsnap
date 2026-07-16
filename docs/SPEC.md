@@ -360,6 +360,19 @@ nobody can see.
       computed from the values themselves — so a colour cannot be added below the floor later.
       Verified by rendering and looking, not only by arithmetic.
 
+- [x] **The series cap and the palette cannot drift apart.** `MAX_SERIES = 6` lives in
+      `detect.ts:6`; `PALETTE.length` is 6 in `chart.ts:60`. Two files, **equal by coincidence**,
+      with nothing binding them — while `chart.ts` indexes `PALETTE[i % PALETTE.length]` in three
+      places, which wraps **silently**. Today that coincidence is the only thing standing between
+      this tool and two series drawn in the same colour. Raise the cap to 8 and series 7–8 repeat
+      colours 1–2: the exact silent-wrong-chart this repo exists to prevent, shipped to whoever
+      forks it. Found by the same panel, after v1.5.1's first criterion had already shipped.
+      **Asserted as a property:** `MAX_SERIES === PALETTE.length`. One line, and it goes red the
+      moment either moves without the other — which is the point, because the next person to
+      touch either number will be reading the code, not this SPEC.
+      **Must keep working:** nothing changes at runtime today; the two numbers are already equal.
+      This is a tripwire for the fork, not a fix for a live defect.
+
 ## v1.6 — the output excludes people (drafted 2026-07-16, NOT READY TO BUILD)
 
 The gap is real: a blind person gets nothing from this tool, a black-and-white printer merges

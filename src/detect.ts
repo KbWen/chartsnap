@@ -2,8 +2,15 @@ import type { ChartType, Column, Detection, ParsedCsv } from "./types";
 
 export class DetectError extends Error {}
 
-/** More than a handful of series turns a shareable chart into spaghetti. */
-const MAX_SERIES = 6;
+/**
+ * More than a handful of series turns a shareable chart into spaghetti.
+ *
+ * Must equal `PALETTE.length` (`chart.ts`), which indexes with `i % PALETTE.length` and so wraps
+ * *silently*: a cap above the palette draws two series in the same colour, which is the one
+ * failure this tool exists to prevent. They live in different files and were equal only by
+ * coincidence until `test/palette.test.ts` started asserting it. Move one, move the other.
+ */
+export const MAX_SERIES = 6;
 
 const names = (cols: Column[]): string[] => cols.map((c) => c.name);
 

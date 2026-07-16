@@ -6,6 +6,7 @@
 // exists to produce, and nothing in the suite could see it.
 import { describe, expect, it } from "vitest";
 import { EXPORT_BG, PALETTE } from "../src/chart";
+import { MAX_SERIES } from "../src/detect";
 
 /** WCAG relative luminance — the only normative formula. */
 const luminance = (hex: string): number => {
@@ -55,5 +56,16 @@ describe("every series colour is a legal graphical object", () => {
     // The one colour that is also --accent in the UI. If a palette change touches this, it is
     // no longer a contrast fix.
     expect(PALETTE[0]).toBe("#155e4c");
+  });
+});
+
+describe("the cap and the palette cannot drift apart", () => {
+  it("MAX_SERIES equals PALETTE.length", () => {
+    // chart.ts indexes PALETTE[i % PALETTE.length] in three places, which wraps SILENTLY. A cap
+    // above the palette draws two series in the same colour — the one failure this tool exists
+    // to prevent — and the two numbers live in different files, equal only by coincidence until
+    // this line. It costs nothing today and it is the tripwire for whoever forks this and
+    // decides eight series sounds reasonable.
+    expect(MAX_SERIES).toBe(PALETTE.length);
   });
 });
