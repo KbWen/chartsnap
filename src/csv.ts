@@ -18,12 +18,25 @@ export function decodeUtf8(buffer: ArrayBuffer): { text: string; looksNonUtf8: b
   const text = new TextDecoder("utf-8", { fatal: false }).decode(buffer);
   // Counted in a loop rather than via text.match(/�/g), which would allocate one
   // string per hit — a mis-encoded multi-MB file is almost all replacement chars.
-  let replacements = 0;
+  let repl = 0;
+  let valid = 0;
   for (let i = 0; i < text.length; i++) {
-    if (text.charCodeAt(i) === 0xfffd) replacements++;
+    const c = text.charCodeAt(i);
+    if (c === 0xfffd) repl++;
+    else if (c > 0x7f) valid++; // else-if: U+FFFD is itself non-ASCII, and isn't evidence of success
   }
-  // A few replacement chars can be incidental; a high rate means wrong encoding.
-  const looksNonUtf8 = replacements > 0 && replacements / Math.max(text.length, 1) > 0.002;
+  // Weigh the bytes that failed to decode against the ones that succeeded — not against the
+  // file's length. A Big5 export whose Chinese sits in the header has a fixed number of
+  // replacements and an unbounded number of ASCII data rows, so a rate against length decays
+  // to nothing (measured: caught at 200 rows, blind at 1,000). A rate against non-ASCII fails
+  // the other way: Big5, Latin-1, UTF-16LE and a good UTF-8 file carrying one stray byte all
+  // score 1.0, so no threshold separates them. Only the absolute count does.
+  //
+  // The floor of 2 is what keeps one stray byte (a CP1252 smart quote out of Word, the
+  // commonest near-UTF-8 artifact there is) from getting a real file refused. It costs us
+  // Latin-1 files with exactly one accent — provably undecidable, since they are identical
+  // here to that stray byte — and we'd rather render those than refuse a good file.
+  const looksNonUtf8 = repl >= 2 && repl > valid;
   return { text, looksNonUtf8 };
 }
 
