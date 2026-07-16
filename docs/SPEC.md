@@ -243,19 +243,32 @@ the encoding edge cases. The tool's headline is "a chart you can post"; `grep -c
 src/style.css` returns **0**; and on the device people actually post from, the export is a dead
 end. Two independent adversaries reached this ordering without being asked to.
 
-- [ ] **The page works on a phone.** A `@media` block exists. At a 390px viewport nothing
-      overflows horizontally, `.chip` and `.type-btn` reach a ≥44px tap target (today ~26–28px),
-      and the preview's axis labels are legible without pinch-zooming — today they compute to
-      **3–5 CSS px**, because `previewSize` caps at 1400 bitmap px regardless of the container
-      and the canvas is then squashed to ~312 px. The drop zone leads with the affordance that
-      works on touch; "Drop a CSV here" is not one.
-- [ ] **The export reaches the camera roll.** `navigator.share({ files: [...] })` behind a
+- [x] **The page works on a phone.** A `@media` block exists. Measured at 375px, before → after:
+      `.chip` 27→44, `.type-btn` 25→44, `.btn` 36→44, the paste box 13.6px→16px (below 16, iOS
+      zooms on focus and never zooms back). 44px is set as a floor via `min-height`, not derived
+      from padding — the first attempt did that and landed on 39px. The drop zone leads with
+      "Choose a CSV", which works on every device, instead of "Drop a CSV here", which is
+      impossible on the one most visitors bring. Desktop verified untouched at 1280px.
+      Nothing overflowed at 375px before the change either — that part of the review didn't
+      survive measurement, and is recorded here rather than quietly dropped.
+- [ ] **The preview is legible on a phone.** NOT DONE, and the diagnosis in the first draft of
+      this criterion was wrong, so it is split out rather than ticked. It blamed `previewSize`
+      capping at 1400 bitmap px. But a 1200×675 export displayed at 312 CSS px genuinely *is*
+      3.1px text — the preview is an honest scaled view of the export, and any image viewer
+      would show the same. Which surfaces the real defect: `fontScale` is
+      `clamp(min(w,h)/700, 1, 4)`, so a Twitter card's ticks are 12px on a 1200px-wide image —
+      **1% of the width**. A Twitter card renders at ~500px on a phone, so the *posted* chart's
+      labels are ~5px there too. The preview isn't lying; it is telling us the export is sized
+      for a monitor. Fixing it means raising the export's font floor (a data-viz change to the
+      shareable artifact, needs its own criterion and a look at every preset), not rescaling
+      the preview — which would make the preview lie to hide it.
+- [x] **The export reaches the camera roll.** `navigator.share({ files: [...] })` behind a
       `navigator.canShare` gate, with `downloadBlob` as the desktop fallback — so the PNG goes
       Photos → Instagram in one tap instead of landing in Files with no route out. An IG Story
       preset (1080×1920) is offered, since Stories is the stated use and a 1:1 export letterboxes.
       Also: `canvas.width = canvas.height = 0` in `exportPng`'s `finally`, so a 34.8 MB A4
       backing store is released instead of waiting for GC.
-- [ ] **The privacy claim is enforced by the browser, not asserted by the copy.** A
+- [x] **The privacy claim is enforced by the browser, not asserted by the copy.** A
       `connect-src 'none'` CSP meta ships. Verified against a real build: zero violations in
       normal use, PNG and SVG still export, and `fetch` / `XHR` / `sendBeacon` / `img`-pixel are
       all blocked — including PapaParse's dormant `NetworkStreamer` XHR, which is why a two-minute
