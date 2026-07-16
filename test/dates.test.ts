@@ -30,35 +30,63 @@ const chartFor = (cells: string[], header = "when") => {
   return { type: d.type, timeAxis: d.timeAxis };
 };
 
-describe("date shapes that must keep working", () => {
-  // Each entry: label, three cells of that shape. If any of these stops being a time-axis
-  // line chart, the change that did it is wrong — irregular samples drawn at equal bar
-  // width state something false about the data, which is the failure mode v1.2 exists to
-  // prevent.
-  const SHAPES: [string, string[]][] = [
-    ["ISO date", ["2025-01-05", "2025-02-10", "2025-03-15"]],
-    ["ISO year-month", ["2025-01", "2025-02", "2025-03"]],
-    ["ISO instant (Z)", ["2025-01-01T09:30:00Z", "2025-01-02T09:30:00Z", "2025-01-03T09:30:00Z"]],
-    [
-      "ISO instant (offset)",
-      ["2025-01-05T09:30:00+08:00", "2025-01-06T09:30:00+08:00", "2025-01-07T09:30:00+08:00"],
-    ],
-    ["ISO datetime, space", ["2025-01-01 09:30", "2025-01-02 09:30", "2025-01-03 09:30"]],
-    ["ISO datetime, seconds", ["2025-01-05 09:30:00", "2025-01-06 09:30:00", "2025-01-07 09:30:00"]],
-    ["slash, padded", ["2025/01/05", "2025/02/10", "2025/03/15"]],
-    ["slash, unpadded", ["2025/1/5", "2025/2/10", "2025/3/15"]],
-    ["month name + year", ["March 2025", "April 2025", "May 2025"]],
-    ["abbrev month + year", ["Jan 2025", "Feb 2025", "Mar 2025"]],
-    ["day month year", ["5 January 2025", "6 February 2025", "7 March 2025"]],
-    ["month day, year", ["Jan 5, 2025", "Feb 10, 2025", "Mar 15, 2025"]],
-  ];
+/**
+ * The must-keep-working list, and how it was built: run `Date.parse` — i.e. the behaviour
+ * being narrowed — over the default output of real exporters, and keep everything it accepts.
+ *
+ * The first version of this list was written from the whitelist's own intent, so it could only
+ * prove the whitelist matched itself, and it shipped seven silent regressions: psql's `+08`
+ * offset, `2025/01/05 09:30`, `Jan 5 2025` without its comma, RFC 2822, BigQuery's ` UTC`.
+ * Each fell to `category` and drew a bar chart of date strings, with `notes: []` — the exact
+ * failure v1.2 exists to prevent, committed by the fix for it.
+ */
+const EXPORTER_SHAPES: [string, string[]][] = [
+  ["ISO date", ["2025-01-05", "2025-02-10", "2025-03-15"]],
+  ["ISO year-month", ["2025-01", "2025-02", "2025-03"]],
+  ["ISO unpadded", ["2025-1-5", "2025-2-10", "2025-3-15"]],
+  ["ISO instant (Z)", ["2025-01-01T09:30:00Z", "2025-01-02T09:30:00Z", "2025-01-03T09:30:00Z"]],
+  ["ISO instant (ms)", ["2025-01-01T09:30:00.123Z", "2025-01-02T09:30:00.123Z", "2025-01-03T09:30:00.123Z"]],
+  ["ISO offset", ["2025-01-05T09:30:00+08:00", "2025-01-06T09:30:00+08:00", "2025-01-07T09:30:00+08:00"]],
+  ["ISO, no seconds", ["2025-01-05T09:30", "2025-01-06T09:30", "2025-01-07T09:30"]],
+  ["ISO, no offset", ["2025-01-01T09:30:00", "2025-01-02T09:30:00", "2025-01-03T09:30:00"]],
+  ["psql timestamp", ["2025-01-05 09:30:00", "2025-01-06 09:30:00", "2025-01-07 09:30:00"]],
+  ["psql timestamptz (+08)", ["2025-01-05 09:30:00+08", "2025-01-06 09:30:00+08", "2025-01-07 09:30:00+08"]],
+  ["psql, microseconds", ["2025-01-05 09:30:00.123456+08", "2025-01-06 09:30:00.123456+08", "2025-01-07 09:30:00.123456+08"]],
+  ["BigQuery (named zone)", ["2025-01-05 09:30:00 UTC", "2025-01-06 09:30:00 UTC", "2025-01-07 09:30:00 UTC"]],
+  ["Google Sheets (unpadded hour)", ["2025-01-05 9:30:00", "2025-01-06 9:30:00", "2025-01-07 9:30:00"]],
+  ["pandas to_csv", ["2025-01-05 09:30:00.000", "2025-01-06 09:30:00.000", "2025-01-07 09:30:00.000"]],
+  ["sqlite", ["2025-01-05 09:30", "2025-01-06 09:30", "2025-01-07 09:30"]],
+  ["ISO unpadded + time", ["2025-1-5 09:30", "2025-1-6 09:30", "2025-1-7 09:30"]],
+  ["slash, padded", ["2025/01/05", "2025/02/10", "2025/03/15"]],
+  ["slash, unpadded", ["2025/1/5", "2025/2/10", "2025/3/15"]],
+  ["slash + time", ["2025/01/05 09:30", "2025/01/06 09:30", "2025/01/07 09:30"]],
+  ["month name + year", ["March 2025", "April 2025", "May 2025"]],
+  ["abbrev month + year", ["Jan 2025", "Feb 2025", "Mar 2025"]],
+  ["day month year", ["5 January 2025", "6 February 2025", "7 March 2025"]],
+  ["month day, year", ["Jan 5, 2025", "Feb 10, 2025", "Mar 15, 2025"]],
+  ["month day year (no comma)", ["Jan 5 2025", "Feb 10 2025", "Mar 15 2025"]],
+  ["RFC 2822", ["Sun, 05 Jan 2025 09:30:00 GMT", "Mon, 06 Jan 2025 09:30:00 GMT", "Tue, 07 Jan 2025 09:30:00 GMT"]],
+  ["JS Date.toString()", ["Sun Jan 05 2025 09:30:00 GMT+0800", "Mon Jan 06 2025 09:30:00 GMT+0800", "Tue Jan 07 2025 09:30:00 GMT+0800"]],
+];
 
-  for (const [label, cells] of SHAPES) {
+describe("date shapes that must keep working", () => {
+  // If any of these stops being a time-axis line chart, the change that did it is wrong:
+  // irregular samples drawn at equal bar width state something false about the data.
+  for (const [label, cells] of EXPORTER_SHAPES) {
     it(`${label} → a time-axis line chart`, () => {
       expect(typeOf(cells)).toBe("date");
       expect(chartFor(cells)).toEqual({ type: "line", timeAxis: true });
     });
   }
+
+  it("the list is not narrower than Date.parse, which is what it replaced", () => {
+    // The guard against writing this list from the new rule's intent again: anything the
+    // delegated parser accepted is a shape someone's export produces, so it must still chart.
+    const missed = EXPORTER_SHAPES.filter(
+      ([, cells]) => !Number.isNaN(Date.parse(cells[0])) && typeOf(cells) !== "date"
+    ).map(([label, cells]) => `${label}: ${cells[0]}`);
+    expect(missed).toEqual([]);
+  });
 
   it("bare years under a year header still tick by year", () => {
     expect(typeOf(["2019", "2020", "2021"], "year")).toBe("date");

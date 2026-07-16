@@ -17,24 +17,34 @@ import { describe, expect, it } from "vitest";
 import { buildConfig } from "../src/chart";
 import { parseCsv } from "../src/csv";
 import { detectChart } from "../src/detect";
+import { PRESETS } from "../src/export";
 
-/** Render for real and report what Chart.js decided — not what detect.ts intended. */
-function axisOf(csv: string): { unit: string | undefined; labels: string[] } {
+/**
+ * Render for real and report what Chart.js decided — not what detect.ts intended.
+ *
+ * `onData` is the assertion that matters. The first version of this file checked the label's
+ * *shape* (`/^[A-Z][a-z]{2} \d{4}$/`), which passes identically whether every tick sits on a
+ * data point or none does — so it was green while month-end data read a month late. Assert the
+ * property the axis must have, not a string describing it.
+ */
+function axisOf(csv: string, size = { w: 1200, h: 675 }) {
   const parsed = parseCsv(csv);
   const detection = detectChart(parsed);
   const canvas = document.createElement("canvas");
-  canvas.width = 1200;
-  canvas.height = 675;
-  const config = buildConfig(parsed, detection, { title: "t", width: 1200, height: 675, animate: false });
+  canvas.width = size.w;
+  canvas.height = size.h;
+  const config = buildConfig(parsed, detection, { title: "t", width: size.w, height: size.h, animate: false });
   config.options = { ...config.options, responsive: false, animation: false, devicePixelRatio: 1 };
   const chart = new Chart(canvas, config);
-  const scale = chart.scales.x as unknown as { _unit?: string };
-  const unit = scale._unit;
-  const labels = chart.scales.x.getTicks().map((t) => String(t.label));
+  const unit = (chart.scales.x as unknown as { _unit?: string })._unit;
+  const ticks = chart.scales.x.getTicks().map((t) => ({ value: t.value, label: String(t.label) }));
   chart.destroy();
   canvas.width = 0;
   canvas.height = 0;
-  return { unit, labels };
+
+  const points = new Set(parsed.columns[0].times.filter((t) => !Number.isNaN(t)));
+  const onData = ticks.filter((t) => points.has(t.value)).length;
+  return { unit, labels: ticks.map((t) => t.label), ticks, onData, total: ticks.length };
 }
 
 /** N points spaced by `step`, starting at `start`, as a date,value CSV. */
@@ -47,68 +57,52 @@ const series = (start: string, n: number, step: (d: Date, i: number) => Date): s
   return ["when,v", ...rows].join("\n");
 };
 
-const monthly = (n: number) => series("2025-01-01", n, (d, i) => new Date(d.getFullYear(), d.getMonth() + i, 1));
-const weekly = (n: number) => series("2025-01-07", n, (d, i) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + i * 7));
-const daily = (n: number) => series("2025-01-01", n, (d, i) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + i));
-const yearly = (n: number) => series("2019-01-01", n, (d, i) => new Date(d.getFullYear() + i, 0, 1));
-const quarterly = (n: number) => series("2025-01-01", n, (d, i) => new Date(d.getFullYear(), d.getMonth() + i * 3, 1));
+const monthly = (n: number) => series("2025-01-01", n, (_d, i) => new Date(2025, i, 1));
+/** Monthly, but dated mid-month — where period-start ticks and the data part company. */
+const onDay = (n: number, day: number) => series("2025-01-01", n, (_d, i) => new Date(2025, i, day));
+/** Month-end close: how essentially all finance and ops monthly data is dated. */
+const monthEnd = (n: number) => series("2025-01-01", n, (_d, i) => new Date(2025, i + 1, 0));
+const quarterEnd = (n: number) => series("2025-01-01", n, (_d, i) => new Date(2025, i * 3 + 3, 0));
+const weekly = (n: number) => series("2025-01-07", n, (_d, i) => new Date(2025, 0, 7 + i * 7));
+const daily = (n: number) => series("2025-01-01", n, (_d, i) => new Date(2025, 0, 1 + i));
+const yearly = (n: number) => series("2019-01-01", n, (_d, i) => new Date(2019 + i, 0, 1));
+const bareYears = (n: number) =>
+  ["year,v", ...Array.from({ length: n }, (_, i) => `${2019 + i},${10 + i}`)].join("\n");
+const hourly = (n: number) =>
+  ["when,v", ...Array.from({ length: n }, (_, i) => `2025-01-01T${String(9 + i).padStart(2, "0")}:00:00,${i}`)].join("\n");
 
-describe("a time axis is labelled with the data's own dates", () => {
-  // The exact shapes that shipped broken, at the lengths a real file has.
-  for (const n of [3, 6, 12, 24]) {
-    it(`${n} monthly points → month labels, not arbitrary days`, () => {
-      const { unit, labels } = axisOf(monthly(n));
-      expect(unit).toBe("month");
-      // "MMM yyyy" per the adapter's month format — never "MMM d".
-      for (const label of labels) expect(label).toMatch(/^[A-Z][a-z]{2} \d{4}$/);
-    });
-  }
+/** Every shape, and the unit it must be labelled by. `undefined` = Chart.js's call. */
+const SHAPES: [string, string, string | undefined][] = [
+  // Monthly dated the 1st is the ONLY day-of-month where period-start ticks coincide with the
+  // data. The first version of this file tested nothing else, so it could not fail — the same
+  // trap as docs/hero.png being the one chart anyone looked at.
+  ["monthly, on the 1st", monthly(6), "month"],
+  ["monthly, on the 15th", onDay(6, 15), "month"],
+  ["monthly, month-end close", monthEnd(6), "month"],
+  ["quarterly, quarter-end", quarterEnd(4), "quarter"],
+  ["3 monthly points (a quarter)", monthly(3), "month"],
+  ["12 monthly points (the sample)", monthly(12), "month"],
+  ["24 monthly points", monthly(24), "month"],
+  ["yearly, written as full dates", yearly(6), "year"],
+  ["bare years under a year header", bareYears(6), "year"],
+  ["weekly (docs/hero.png's shape)", weekly(16), "day"],
+  ["daily", daily(20), "day"],
+  ["sub-daily", hourly(10), undefined],
+];
 
-  it("quarterly points do not get labelled by day", () => {
-    const { unit } = axisOf(quarterly(8));
-    expect(["month", "quarter"]).toContain(unit);
+describe.each(PRESETS)("at the $id preset", (preset) => {
+  const size = { w: preset.width, h: preset.height };
+
+  // The property, asserted at every preset — not the label's shape at one. A daily CSV came
+  // out "Jan 1, Jan 4" at 1200x675 and "12AM, 10AM, 8PM" at A4 on data with no clock in it,
+  // and a suite that only rendered at 1200x675 could never see it.
+  it.each(SHAPES)("%s — every tick is a date the file has", (_name, csv, _unit) => {
+    const { onData, total, labels } = axisOf(csv, size);
+    expect(total).toBeGreaterThan(0);
+    expect({ onData, total, labels }).toEqual({ onData: total, total, labels });
   });
 
-  it("yearly points written as full dates tick by year, not by month", () => {
-    // The same defect one unit up, and the reason v1.3's fix wasn't enough: it keys off the
-    // CELLS being bare years, so `2019-01-01, 2020-01-01…` — an ordinary way to write an
-    // annual series — falls through and gets labelled "Jan 2019, Jul 2019, Jan 2020…".
-    const { unit, labels } = axisOf(yearly(6));
-    expect(unit).toBe("year");
-    for (const label of labels) expect(label).toMatch(/^\d{4}$/);
-  });
-});
-
-describe("must not regress — shapes that are already correct", () => {
-  it("bare years under a year header still tick by year (v1.3's fix)", () => {
-    const csv = ["year,v", ...Array.from({ length: 6 }, (_, i) => `${2019 + i},${10 + i}`)].join("\n");
-    const { unit, labels } = axisOf(csv);
-    expect(unit).toBe("year");
-    for (const label of labels) expect(label).toMatch(/^\d{4}$/);
-  });
-});
-
-describe("must not regress — shapes that are already correct", () => {
-  it("weekly data (docs/hero.png's shape) keeps landing on real data points", () => {
-    // Day-unit ticks are right here: a weekly series lives on the same fixed grid, so the
-    // ticks fall on points that exist. Forcing `week` would snap to week starts instead and
-    // could label a day the data has nothing on — a regression dressed as a fix.
-    const { unit, labels } = axisOf(weekly(16));
-    expect(unit).toBe("day");
-    // Every label is a real date in the file: the data starts Tue 7 Jan and steps 7 days,
-    // so every tick must be a Tuesday whose date is 7 + 7k.
-    for (const label of labels) {
-      const day = Number(label.split(" ")[1]);
-      expect((day - 7) % 7 === 0 || (day - 4) % 7 === 0 || (day - 1) % 7 === 0).toBe(true);
-    }
-  });
-
-  it("daily data keeps its day labels", () => {
-    expect(axisOf(daily(20)).unit).toBe("day");
-  });
-
-  it("sub-daily data is untouched", () => {
-    const csv = ["when,v", ...Array.from({ length: 10 }, (_, i) => `2025-01-01T${String(9 + i).padStart(2, "0")}:00:00,${i}`)].join("\n");
-    expect(["hour", "minute"]).toContain(axisOf(csv).unit);
+  it.each(SHAPES.filter(([, , u]) => u !== undefined))("%s — ticks by its own unit", (_name, csv, unit) => {
+    expect(axisOf(csv, size).unit).toBe(unit);
   });
 });

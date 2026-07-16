@@ -275,8 +275,16 @@ number that increments faster than the ideas behind it is just a counter.
       must each still label sensibly; a fixture pins one of each, run before the change. The
       hero is why this survived four releases: the only chart anyone ever looked at was the one
       shape that cannot show the bug.
-      **Verified by looking at the rendered PNG**, not by asserting `timeAxis === true` — which
-      is true today, and true while the axis is wrong.
+      **As shipped:** forcing the unit was only half of it, and the half that shows. Chart.js
+      still steps ticks from the period *start*, so monthly data dated the 15th, or a month-end
+      close, got ticks on the 1st — 0 of 6 on a real point, every value reading a period late,
+      on an axis that now looked authoritative. `ticks: { source: "data" }` is what makes a tick
+      a date the file has. Measured across monthly-on-the-1st / -15th / month-end, quarter-end,
+      weekly, daily and sub-daily, at **every preset**: ticks on data = ticks, in all of them.
+      **Asserted as the property** — `tick.value ∈ data` — not as the label's shape. The first
+      version of this criterion was tested with `/^[A-Z][a-z]{2} \d{4}$/`, which passes whether
+      every tick is on data or none is, on fixtures that only ever used the 1st of the month:
+      the one day where period-start ticks coincide with the data. It could not fail.
 - [x] **A posted chart is legible at the size it is posted at.** `fontScale` is
       `clamp(min(w,h)/700, 1, 4)`, which puts a Twitter card's ticks at 12px on a 1200px-wide
       image — **1% of the width** — and its title at 25px, ~2%. Look at any export and the title
@@ -288,10 +296,15 @@ number that increments faster than the ideas behind it is just a counter.
       the preview is an honest scaled view and any image viewer agrees. The preview was never
       lying; it was reporting that the export is sized for a monitor. Rescaling the preview would
       have made it lie to hide the real defect, and would have ticked the box.
-      **After:** a floor on type size relative to the image's short edge, checked across every
-      preset (Twitter, IG post, IG story, A4) — the A4 case runs the other way, where `fontScale`
-      pins near its ceiling and the constraint is print, not a phone.
-      **Verified by looking**, at every preset, at the size each is actually consumed at.
+      **After (as shipped, corrected 2026-07-16):** type scales with the image's **width**, not
+      its short edge — the short-edge version is what made landscape the worst case, so the
+      earlier wording here described a fix that would not have worked, and was ticked anyway.
+      Sized from the *preset* and then scaled by the preview's own factor, so both paths agree:
+      computing it from the render width let the ceiling bite on the export and not on the
+      preview, and the preview overstated A4's type by **45%**. That is now a tested invariant
+      (`title/width` within 2% between preview and export at every preset), not a comment.
+      Type and geometry are separate scales: sharing one meant raising type for legibility also
+      inflated the dots and rules, which the numbers called fine and the render called chunky.
 - [x] **The export reaches the camera roll.** `navigator.share({ files: [...] })` behind a
       `navigator.canShare` gate, with `downloadBlob` as the desktop fallback — so the PNG goes
       Photos → Instagram in one tap instead of landing in Files with no route out. An IG Story

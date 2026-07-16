@@ -180,6 +180,9 @@ export function exportSvg(
   return new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
 }
 
+/** `declined` is the user closing the share sheet — it is a decision, not a failure. */
+export type ShareResult = "shared" | "declined" | "unavailable";
+
 /**
  * Hand the file to the OS share sheet when there is one, so the PNG can reach Photos (and
  * from there Instagram) in one tap. `downloadBlob` alone dead-ends on a phone: iOS Safari
@@ -187,25 +190,29 @@ export function exportSvg(
  * composer reads only the Photo Library — so the chart the tool exists to make cannot be
  * posted from the device people post from.
  *
- * Returns false when sharing isn't available or the user dismissed the sheet, so the caller
- * can fall back to a download. Desktop Chrome/Firefox report no canShare for files, which is
- * the right outcome — a download is better there anyway.
+ * Three states, not a boolean. A boolean merged "no sheet here" with "the user said no", and
+ * the caller fell back to a download for both — so dismissing the sheet dropped an unwanted
+ * file on the device anyway. The comment right here used to say that was the thing to avoid
+ * while the code did it.
  */
-export async function shareFile(blob: Blob, filename: string): Promise<boolean> {
+export async function shareFile(blob: Blob, filename: string): Promise<ShareResult> {
   const nav = navigator as Navigator & {
     canShare?: (d: ShareData) => boolean;
     share?: (d: ShareData) => Promise<void>;
   };
-  if (typeof File !== "function" || !nav.canShare || !nav.share) return false;
+  if (typeof File !== "function" || !nav.canShare || !nav.share) return "unavailable";
   const file = new File([blob], filename, { type: blob.type });
-  if (!nav.canShare({ files: [file] })) return false;
+  // Desktop Chrome/Firefox report no file sharing, which is the right answer — a download is
+  // better there anyway.
+  if (!nav.canShare({ files: [file] })) return "unavailable";
   try {
     await nav.share({ files: [file] });
-    return true;
-  } catch {
-    // AbortError (user closed the sheet) and NotAllowedError land here alike. Either way the
-    // user made a choice; silently downloading behind their back would be worse than nothing.
-    return false;
+    return "shared";
+  } catch (err) {
+    // AbortError is the user dismissing the sheet. Anything else (NotAllowedError, a
+    // WebView with a broken implementation) means sharing didn't work, so a download is the
+    // honest fallback.
+    return (err as { name?: string } | null)?.name === "AbortError" ? "declined" : "unavailable";
   }
 }
 

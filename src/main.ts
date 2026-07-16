@@ -68,7 +68,12 @@ function autoTitle(d: Detection): string {
   return `${ys.join(", ")} by ${d.xColumn.name}`;
 }
 
-/** Downscale a preset to a snappy preview size while keeping aspect + font ratios. */
+/**
+ * Downscale a preset to a snappy preview size, keeping its aspect ratio. Font ratios are kept
+ * by `buildConfig`'s `basis`, which sizes type from the preset and then applies this same
+ * downscale — this function alone can't promise it, and the comment that used to say it could
+ * was false for two presets.
+ */
 function previewSize(p: ExportPreset): { w: number; h: number } {
   const MAX = 1400;
   const k = Math.min(1, MAX / Math.max(p.width, p.height));
@@ -87,6 +92,7 @@ function renderPreview(): void {
     title: state.title,
     width: w,
     height: h,
+    basis: preset.width, // size type from the preset, so the preview matches the download
   });
   config.options = {
     ...config.options,
@@ -286,10 +292,11 @@ dlPng.addEventListener(
     const preset = currentPreset();
     const blob = await exportPng(state.parsed, state.detection, state.title, preset);
     const name = `chartsnap-${preset.id}.png`;
-    // On a phone the share sheet is the only route to the camera roll, and the camera roll
-    // is the only route into Instagram. Falls back to a download when there's no sheet, or
-    // when the user dismissed it.
-    if (!(await shareFile(blob, name))) downloadBlob(blob, name);
+    // On a phone the share sheet is the only route to the camera roll, and the camera roll is
+    // the only route into Instagram. Only "unavailable" falls back to a download — dismissing
+    // the sheet is an answer, and downloading anyway would be the file-in-Files dead end this
+    // exists to remove, delivered against the user's stated wish.
+    if ((await shareFile(blob, name)) === "unavailable") downloadBlob(blob, name);
   })
 );
 

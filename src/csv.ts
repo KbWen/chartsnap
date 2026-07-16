@@ -164,15 +164,26 @@ const MONTH_NAME =
  * export on earth, which would fall to a category and be drawn as equal-width bars. So gate
  * its *input* instead. Anything not listed here is a category: honest, and deterministic.
  */
+const DAY_NAME = "mon|tue|wed|thu|fri|sat|sun";
+/** `Z`, `+08:00`, `+0800`, `+08`, or a spelled-out zone. ISO 8601 permits the bare `±hh`. */
+const OFFSET = "(?:Z|[+-]\\d{2}(?::?\\d{2})?|\\s*(?:UTC|GMT(?:[+-]\\d{2}:?\\d{2})?))";
+/** `9:30`, `09:30:00`, `09:30:00.123456` — unpadded hours and any fraction. */
+const TIME = "\\d{1,2}:\\d{2}(?::\\d{2}(?:\\.\\d+)?)?";
+
 const PARSEABLE: RegExp[] = [
-  // 2025-01-01T09:30:00Z / +08:00 / no offset (local, per ECMA-262 — what a spreadsheet
-  // means), and the space-separated form Excel and SQL exports write.
-  /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/i,
-  // Year-first slash dates: unambiguous, unlike 01/02/2025 (see SPEC "Later").
-  /^\d{4}\/\d{1,2}\/\d{1,2}$/,
+  // ISO / SQL date-time, `T` or space, padded or not, optional offset or named zone. Covers
+  // psql timestamptz, BigQuery, pandas, sqlite, Sheets.
+  new RegExp(`^\\d{4}-\\d{1,2}-\\d{1,2}[T ]${TIME}\\s*(?:${OFFSET})?$`, "i"),
+  // Year-first slash dates, with or without a time: unambiguous, unlike 01/02/2025 (SPEC "Later").
+  new RegExp(`^\\d{4}/\\d{1,2}/\\d{1,2}(?:[T ]${TIME}\\s*(?:${OFFSET})?)?$`, "i"),
   new RegExp(`^(?:${MONTH_NAME})\\.? \\d{4}$`, "i"), // March 2025
   new RegExp(`^\\d{1,2} (?:${MONTH_NAME})\\.? \\d{4}$`, "i"), // 5 January 2025
-  new RegExp(`^(?:${MONTH_NAME})\\.? \\d{1,2}, ?\\d{4}$`, "i"), // Jan 5, 2025
+  new RegExp(`^(?:${MONTH_NAME})\\.? \\d{1,2},? \\d{4}$`, "i"), // Jan 5, 2025 — and without the comma
+  // RFC 2822, and JS's own Date.toString(). Both turn up in exports written by hand.
+  new RegExp(
+    `^(?:${DAY_NAME}),? (?:\\d{1,2} (?:${MONTH_NAME})|(?:${MONTH_NAME}) \\d{1,2}) \\d{4}(?: ${TIME})?(?:\\s*${OFFSET})?$`,
+    "i"
+  ),
 ];
 
 /**
@@ -258,6 +269,24 @@ function sampleIndices(n: number, target: number): number[] {
 const XML_ILLEGAL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
 export const scrub = (s: string): string => s.replace(XML_ILLEGAL, "");
 
+/**
+ * A column of things that look like dates but that chartsnap won't guess at.
+ *
+ * Refusing to guess is right — `01/02/2025` is 1 Feb to most of the world and 2 Jan to the US,
+ * and the old code picked one silently. But *falling to text without a word* is the same sin
+ * wearing different clothes: the column becomes a category, `detect` draws a bar chart of date
+ * strings, and `droppedSeries` can't say so because it only ever holds numeric columns. So the
+ * one thing this must not be is quiet.
+ */
+function unreadDateNote(column: string, raw: string[]): string | null {
+  const cells = raw.map((c) => c.trim()).filter((c) => c !== "");
+  if (cells.length === 0) return null;
+  // Cells a lenient parser would have taken and we deliberately would not.
+  const refused = cells.filter((c) => !Number.isNaN(Date.parse(c)) && Number.isNaN(cleanTime(c, false)));
+  if (refused.length / cells.length < TYPE_THRESHOLD) return null;
+  return `“${column}” looks like dates in a format that could be read more than one way (e.g. “${refused[0]}”), so it's charted as plain text rather than guessed at. Re-save it as YYYY-MM-DD for a time axis.`;
+}
+
 /** A line that carried no fields at all — a truly blank line, not a row of blank cells. */
 const isBlankLine = (row: string[]): boolean => row.length <= 1 && !(row[0] ?? "").trim();
 const isAllEmpty = (row: string[]): boolean => row.every((c) => !(c ?? "").trim());
@@ -326,6 +355,11 @@ export function parseCsv(text: string): ParsedCsv {
     if (worthSaying) {
       const warning = numberWarning(name, style);
       if (warning) notes.push(warning);
+    }
+    // A date column that fell to text has no other way to announce itself.
+    if (type === "category") {
+      const unread = unreadDateNote(name, raw);
+      if (unread) notes.push(unread);
     }
     return { name, type, raw, nums, times, bareYears };
   });
