@@ -3,7 +3,7 @@ import { Chart } from "chart.js";
 import { buildConfig } from "./chart";
 import { CsvError, decodeUtf8, parseCsv, scrub } from "./csv";
 import { DetectError, detectChart, feasibleTypes } from "./detect";
-import { downloadBlob, exportPng, exportSvg, PRESETS, renderSvgString } from "./export";
+import { downloadBlob, exportPng, exportSvg, PRESETS, renderSvgString, shareFile } from "./export";
 import type { ChartType, Detection, ExportPreset, ParsedCsv } from "./types";
 // Bundled sample CSVs, inlined at build time (?raw) so "try a sample" needs no network.
 import sampleLine from "../samples/monthly-sales.csv?raw";
@@ -285,7 +285,11 @@ dlPng.addEventListener(
     if (!state) return;
     const preset = currentPreset();
     const blob = await exportPng(state.parsed, state.detection, state.title, preset);
-    downloadBlob(blob, `chartsnap-${preset.id}.png`);
+    const name = `chartsnap-${preset.id}.png`;
+    // On a phone the share sheet is the only route to the camera roll, and the camera roll
+    // is the only route into Instagram. Falls back to a download when there's no sheet, or
+    // when the user dismissed it.
+    if (!(await shareFile(blob, name))) downloadBlob(blob, name);
   })
 );
 

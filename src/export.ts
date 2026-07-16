@@ -6,6 +6,9 @@ import type { Detection, ExportPreset, ParsedCsv } from "./types";
 export const PRESETS: ExportPreset[] = [
   { id: "twitter", label: "Twitter card · 1200×675", width: 1200, height: 675 },
   { id: "instagram", label: "IG post · 1080×1080", width: 1080, height: 1080 },
+  // Stories is the thing people actually post from a phone, and a 1:1 export letterboxes
+  // into it with grey bands. The layout code already handles portrait.
+  { id: "story", label: "IG story · 1080×1920", width: 1080, height: 1920 },
   // A4 landscape at 300 DPI — crisp enough to drop into a printed report.
   { id: "a4print", label: "A4 print · 3508×2480", width: 3508, height: 2480 },
 ];
@@ -63,6 +66,12 @@ export async function exportPng(
     return blob;
   } finally {
     chart.destroy();
+    // destroy() tears down Chart.js state but leaves the backing store — 34.8 MB at the A4
+    // preset — alive until GC gets round to it. Mobile Safari budgets total canvas memory
+    // and kills the tab when it's exceeded, so release it now rather than stacking one per
+    // export. Zeroing the dimensions is the documented way to free it immediately.
+    canvas.width = 0;
+    canvas.height = 0;
   }
 }
 
@@ -169,6 +178,35 @@ export function exportSvg(
 ): Blob {
   const svg = renderSvgString(parsed, detection, title, preset);
   return new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+}
+
+/**
+ * Hand the file to the OS share sheet when there is one, so the PNG can reach Photos (and
+ * from there Instagram) in one tap. `downloadBlob` alone dead-ends on a phone: iOS Safari
+ * does honour `<a download>` on a blob:, but the file lands in Files, and Instagram's
+ * composer reads only the Photo Library — so the chart the tool exists to make cannot be
+ * posted from the device people post from.
+ *
+ * Returns false when sharing isn't available or the user dismissed the sheet, so the caller
+ * can fall back to a download. Desktop Chrome/Firefox report no canShare for files, which is
+ * the right outcome — a download is better there anyway.
+ */
+export async function shareFile(blob: Blob, filename: string): Promise<boolean> {
+  const nav = navigator as Navigator & {
+    canShare?: (d: ShareData) => boolean;
+    share?: (d: ShareData) => Promise<void>;
+  };
+  if (typeof File !== "function" || !nav.canShare || !nav.share) return false;
+  const file = new File([blob], filename, { type: blob.type });
+  if (!nav.canShare({ files: [file] })) return false;
+  try {
+    await nav.share({ files: [file] });
+    return true;
+  } catch {
+    // AbortError (user closed the sheet) and NotAllowedError land here alike. Either way the
+    // user made a choice; silently downloading behind their back would be worse than nothing.
+    return false;
+  }
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {
