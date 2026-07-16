@@ -38,8 +38,11 @@
         aria-label="Drop a CSV file here, or click to browse"
       >
         <div class="drop-inner">
-          <p class="drop-title">Drop a CSV here</p>
-          <p class="drop-sub">click to browse, or paste a CSV anywhere on the page</p>
+          <!-- Lead with the action that works on every device. "Drop a CSV here" was the
+               headline, and drag-and-drop does not exist on a phone — so the loudest thing
+               on the page was an instruction half the visitors cannot follow. -->
+          <p class="drop-title">Choose a CSV</p>
+          <p class="drop-sub">or drop one in, or paste a CSV anywhere on the page</p>
           <input id="file" type="file" accept=".csv,text/csv,text/plain" hidden />
         </div>
       </section>
