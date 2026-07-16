@@ -15,6 +15,28 @@ const CASES: Record<string, string> = {
   scatter: "h,w\n158,52\n167,61\n175,70\n185,83",
 };
 
+/**
+ * jsdom's XMLSerializer emits `xmlns:xlink` twice on the root — a well-formedness error with
+ * nothing to do with the chart. Verified 2026-07-10 against a real browser that the raw SVG
+ * parses clean (see DECISIONS), so collapse the duplicate rather than chase a phantom.
+ */
+const normalizeRoot = (svg: string): string =>
+  svg.replace(
+    /(<svg\b)([^>]*?)( xmlns:xlink="http:\/\/www\.w3\.org\/1999\/xlink")([^>]*?)\3/,
+    "$1$2$3$4"
+  );
+
+/**
+ * The exported SVG is a file users reopen — it has to be well-formed XML, not merely contain
+ * the string "<svg". Note DOMParser does NOT throw on malformed input: it returns a document
+ * whose root is `<parsererror>`. So the assertion has to be on the result; a test that merely
+ * *calls* parseFromString is green no matter how broken the output is.
+ */
+const parseErrorIn = (svg: string): string | null => {
+  const doc = new DOMParser().parseFromString(normalizeRoot(svg), "image/svg+xml");
+  return doc.querySelector("parsererror")?.textContent ?? null;
+};
+
 describe("SVG export produces real, non-empty vector output", () => {
   for (const [name, csv] of Object.entries(CASES)) {
     it(`${name} chart → valid SVG with geometry`, () => {
@@ -22,12 +44,19 @@ describe("SVG export produces real, non-empty vector output", () => {
       const detection = detectChart(parsed);
       const svg = renderSvgString(parsed, detection, name, PRESETS[0]);
 
-      expect(svg).toContain("<svg");
+      expect(parseErrorIn(svg)).toBeNull(); // well-formed XML, not just "contains <svg"
       expect(svg).toMatch(/<path\b/); // actual drawn geometry, not just a frame
       expect(svg).toContain("#fffdf8"); // warm background rect was injected
       expect(svg.length).toBeGreaterThan(2000);
     });
   }
+
+  it("the well-formedness check can actually fail", () => {
+    // The tripwire has to be able to go red, or it is decoration. A raw & is illegal in XML.
+    const broken = '<svg xmlns="http://www.w3.org/2000/svg"><text>a & b</text></svg>';
+    expect(broken).toContain("<svg"); // what this suite used to assert: green on broken output
+    expect(parseErrorIn(broken)).not.toBeNull(); // what it asserts now: red
+  });
 
   it("a forced categorical line (override) renders real geometry", () => {
     const parsed = parseCsv(CASES.bar); // category data, auto-detected as bar
