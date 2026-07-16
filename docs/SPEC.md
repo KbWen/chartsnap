@@ -356,7 +356,7 @@ the draft was. **Nothing here is built. Do not tick anything until it is rewritt
   serializer plus a pattern-fill story for bars. That is a release, not a criterion. **Later.**
 - **The one colour that provably excludes people is `#cf8636`** — series 2, measured **2.90:1**
   on `EXPORT_BG`, below WCAG 1.4.11's 3:1 for graphical objects. The draft froze it as "the
-  signature, does not move". `#cb8335` measures 3.02:1 and is visually indistinguishable. That
+  signature, does not move". `#ca8233` measures 3.06:1 and is visually indistinguishable. That
   is a real one-hex criterion and it survives, below.
 - **A contrast test cannot be computed from CSS in this repo.** Measured on the pinned jsdom
   29.1.1: `getComputedStyle().color` returns the literal `"var(--faint)"`, `font-size` returns
@@ -433,44 +433,76 @@ shape all three reviewers agree on:
       — checkable in jsdom, and **it goes red against today's code**. The word "announces" is
       earned by one NVDA and one VoiceOver pass recorded in LAUNCH.md, never by a green suite.
 - [ ] **Series 2 clears the graphical-object floor.** `#cf8636` measures 2.903:1 on `EXPORT_BG`,
-      failing WCAG 1.4.11's 3:1 for graphical objects. `#cb8335` is 3.021:1 and **ΔE00 1.08** from
+      failing WCAG 1.4.11's 3:1 for graphical objects. `#ca8233` is 3.059:1 and **ΔE00 1.37** from
       the original — below the JND, with no original alongside to compare against. The "signature
       does not move" objection does not survive the measurement: it moves by an amount nobody can
       see, and the alternative is shipping the one colour in the output that provably excludes
       people. Must keep working: `reproducibility.test.ts` stays green.
-- [ ] **No two series are the same colour — in grayscale OR to a colourblind reader — because the
-      chart never draws more series than can be told apart.** `MAX_SERIES` becomes **4**
-      (`detect.ts:6`); beyond 4, columns are named in `droppedSeries` as they already are (v1.3).
-      This *deletes* the problem rather than fixing it, and the arithmetic says it is the only
-      move: WCAG 1.4.11's 3:1 on `#fffdf8` caps a series at **L\* 61.2**, leaving a 36.2 L\* band,
-      so 6 series can never exceed **ΔL\* 7.23** pairwise (5 → 9.04), while ~10 is what a stroke
-      1.2–2.8 halftone cells wide needs — and at the Twitter card, ~1 cell, gray is not a channel
-      at all. 4 gives 12.05 and the constraint set becomes satisfiable.
-      **Two axes, both asserted over `PALETTE` itself, for every pair — not adjacent** (`PALETTE`
-      is in draw order; `[70,90,70,90,70,90]` passes an adjacency rule with three identical pairs):
-      (a) min pairwise **ΔL\*** ≥ 10 — **not BT.601 luma**, which weights blue 0.114 where it
-      carries 0.0722 of luminance: `#218ec7`/`#7d8778` are ΔY'601 14.4 apart and ΔL\* **0.8**, the
-      same gray. BT.601 also named the wrong worst pair here — it headlines s3/s4 (ΔL\* 1.0) while
-      **s5/s6 sit at ΔL\* 0.6**. (b) min pairwise **ΔE00 ≥ 15** after simulating deuteranopia *and*
-      protanopia (Machado 2009, severity 1.0, in linear RGB) — a separate axis, not a consequence,
-      and **the one already broken: s3/s5 measure ΔE00 2.2 for a protanope today**, i.e. the same
-      colour, for ~8% of men, on screen, now.
-      Ships `["#155e4c", "#ca8233", "#497f99", "#343463"]` — worst pair ΔL\* 10.0, ΔE00 deutan 22,
-      protan 25, hue spread 54°, contrasts 7.55 / 3.06 / 4.32 / 11.37. `#155e4c` does not move.
-      **Explicitly not doing: a `borderDash` ramp.** It works in no medium. `canvas2svg` has no
-      dash support (`STYLES`, `canvas2svg.js:106-146`) and `export.ts:88-96` shims `set/getLineDash`
-      into a sink that satisfies Chart.js and drops the data — measured, 0 `stroke-dasharray` in
-      15,127 valid bytes that pass **every** assertion in `test/svg.test.ts`. And in the PNG,
-      `chart.ts:183-184`'s `usePointStyle: true` routes the legend through `getStyle(0)` → *point*
-      options, where `borderDash` does not exist (measured `lineDash=undefined` on all six items),
-      and `pointStyle: "circle"` is a filled disc that could not show one anyway. Six dashed lines
-      with an unmappable key is not a fix.
-      **Later, not now:** hatched bar fills. `canvas2svg` *does* support `<pattern>`
-      (`canvas2svg.js:202`, `:354`), so patterns are the one redundant channel that survives both
-      media — but at `MAX_SERIES: 4` there is nothing left for them to fix.
-      **This is a product decision, not a defect fix:** it changes which charts render, and the
-      palette is the signature. Recorded, not taken.
-- [ ] **`--faint` stops failing AA** — by whichever of the two decisions above is taken.
+- [ ] **No two series are the same colour to a colourblind reader.** This is the live defect and
+      it is not in dispute: series 3 `#6b7f92` and series 5 `#8a8199` measure **ΔE00 2.24 under
+      protanopia** (Machado 2009, severity 1.0, in linear RGB) — at the JND, i.e. the same
+      colour, for ~8% of men, on screen, in colour, today. No printer required, and no criterion
+      has ever mentioned CVD. **It does not need the series cap cut:** a 6-colour palette keeping
+      `#155e4c`, staying inside the design language (L* >= 24, chroma <= 60), reaching min CVD
+      ΔE00 **20.83** and all >=3.01:1 was found and verified. Asserted as a property over
+      `PALETTE` itself: min pairwise ΔE00 >= 15 after simulating deuteranopia **and**
+      protanopia — a separate axis from grayscale, not a consequence of it (`#506277`/`#026e76`
+      are ΔY'601 16.4 apart and ΔE00 **0.1** for a deuteranope; `#87697c`/`#8e7431` are ΔE00 26.5
+      for a deuteranope and ΔY'601 **0.0**).
+
+- [ ] **Grayscale: a decision, not a criterion — three doors, and the SPEC must pick one.**
+      A first draft claimed six series was *arithmetically impossible* and cut `MAX_SERIES` to 4.
+      **That claim is false**, and a Tenth Man broke it with a counterexample since verified:
+      `["#155e4c","#4c1102","#2a0017","#1e3681","#ac7ab4","#148133"]` — six colours, min pairwise
+      **ΔL* 10.08**, min CVD ΔE00 18.99, min contrast **3.33:1**, signature untouched. Every
+      stated constraint, satisfied, at six.
+      The proof had two premises. WCAG 1.4.11 supplies the *ceiling* (L* <= 61.16 for 3:1 on
+      `EXPORT_BG`) and that is real. The *floor* — "around L* 25" — is cited to nothing: 1.4.11
+      sets no maximum contrast, so it cannot supply one, and the floor was doing 100% of the
+      impossibility work. It is also the conclusion restated as a premise: `#155e4c` sits at
+      L* 35.37, and a ΔL*=10 grid anchored there under a 61.16 ceiling puts n=4's floor at
+      **L* 25.37** — the asserted number, to 0.4. Three cracks confirm it: the draft's own
+      `#343463` is **L* 23.96, below its own floor**; `THEME.ink` `#1c1a15` is **L* 9.32**, so
+      the tool already titles its charts darker than any series a 6-palette needs; and "4 gives
+      12.05, satisfiable with margin" is wrong — the shipped 4-palette's worst pair is
+      **ΔL* 10.01** against a threshold of 10.
+      **What is actually binding is `chart.ts:45-46`** — *"the rest are muted on purpose so they
+      sit back instead of fighting for attention"*. That is design language: legitimate,
+      load-bearing, the thing the 2026-07-05 and 07-06 passes built. But encoding it as an
+      unstated L* floor and calling the result *impossible* converts a preference into a proof.
+      **The honest statement: series colours must be muted mid-tones, so six cannot be told apart
+      in grayscale, and something must give.** Three doors, and this SPEC must walk through one
+      of them *in writing* rather than let an undefended constant choose:
+      1. **The design language** — allow a series darker than L* 25 (the tool's own ink is 9.32),
+         and six becomes reachable. Costs the "muted support colours" identity.
+      2. **The grayscale criterion** — concede it, and say so in the README, which already
+         documents limits honestly ("It charts rows as they are — it doesn't sum or group them").
+         Note this is the weakest of the three constraints: only **A4** has a defined physical
+         size (`export.ts:6-14`); the other three presets are screen/social, the tool's headline
+         is "a chart you can post", and the draft itself conceded that at the Twitter card gray
+         is not a channel at all. The B&W-printer item was withdrawn to Later the same day.
+      3. **The cap** — cut it. But cut it knowing the cost, which the draft mispriced:
+         - It costs **all three users this SPEC names** (`SPEC.md` "Who is it for"). Run against
+           the real `detectChart`: *survey results* (a 5-point Likert — the canonical survey
+           shape) loses `strongly_disagree`; *a workout log* (5 lifts) loses one; *sales numbers*
+           (5 regions) loses one. A cap of 4 renders a Likert scale **missing one end** — not
+           merely lossy, but flattering.
+         - **The note does not travel.** `droppedSeries` appears in `detect.ts` (3x) and
+           `main.ts` (1x) and **zero times in `chart.ts` or `export.ts`**, while `chart.ts:130`
+           calls itself *"the single source of truth for every render target (preview, PNG,
+           SVG)"*. The warning naming the dropped columns cannot reach the exported PNG or SVG.
+           It protects the person at the keyboard, not the person who receives the chart — and
+           the chart is the product. Any cap decision leaning on that note leans on nothing.
+         - **5 was never costed.** The draft jumped 6 -> 4 because 5 scores ΔL* 9.04 *at the
+           undefended floor of 25*. At a floor of 20 it scores 10.29 and passes, and a 5-colour
+           palette exists at floor 15 (ΔL* 10.05, CVD ΔE00 19.00, all >=3.01:1) — satisfying the
+           criterion at a cost of zero to all three named users.
+      **Prerequisite whichever door is taken:** `MAX_SERIES` (`detect.ts:6`) and `PALETTE.length`
+      (`chart.ts:47`) are both 6 **by coincidence**, in two files, with nothing binding them —
+      and `chart.ts:283/345/391` index `PALETTE[i % PALETTE.length]`, which wraps silently. Today
+      the coincidence is the only thing preventing two series from being drawn in the same
+      colour. Bind them, or a forker who raises the cap ships the exact silent-wrong-chart this
+      repo exists to prevent.
 
 **Prerequisite for the whole section:** the dropzone is a `<section>` with an accessible name
 (`index.html:34-39`), i.e. a *region landmark*, announced as scenery — and `<input id="file"
