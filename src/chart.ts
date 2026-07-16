@@ -44,7 +44,20 @@ Chart.defaults.font.family =
 
 // Two colours I actually like (deep pine + ochre) carry the common 1–2 series case;
 // the rest are muted on purpose so they sit back instead of fighting for attention.
-const PALETTE = ["#155e4c", "#cf8636", "#6b7f92", "#a86a5f", "#8a8199", "#6f8a76"];
+//
+// The ochre was #cf8636 until 2026-07-16, which measured 2.903:1 against EXPORT_BG — under
+// WCAG 1.4.11's 3:1 for graphical objects, i.e. the one colour in the output that provably
+// excluded people. #ca8233 is 3.059:1 and ΔE00 1.37 away: hue moves 0.1°, chroma 0.5, and only
+// lightness shifts, by 1.6 L*. Nobody can see it, and nobody has the original to compare to.
+// Not #cb8335 or #cc8333, which are nominally legal and drop below 3:1 under a single 8-bit
+// rounding step — margins thinner than the grid they ship on.
+//
+// NOTE for anyone forking: this line is 6 long and detect.ts's MAX_SERIES is 6 *by coincidence*,
+// in another file, with nothing binding them — and the lookups below wrap with
+// `i % PALETTE.length`. Today that coincidence is the only thing stopping two series being drawn
+// in the same colour. Raise the cap without extending this array and you ship exactly the silent
+// wrong chart this repo exists to prevent. See SPEC v1.6 for what else this palette owes.
+export const PALETTE = ["#155e4c", "#ca8233", "#6b7f92", "#a86a5f", "#8a8199", "#6f8a76"];
 
 /** Warm near-white background shared by the raster (PNG) and vector (SVG) exports. */
 export const EXPORT_BG = "#fffdf8";

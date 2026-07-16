@@ -331,6 +331,35 @@ number that increments faster than the ideas behind it is just a counter.
       byte-identical and never reaches offline users. Hash the whole precache manifest first, or
       this criterion ships to nobody.
 
+## v1.5.1 — one hex (decided 2026-07-16)
+
+The only thing a four-expert panel agreed on without qualification, pulled out of the v1.6 draft
+that the same panel took apart. It depends on none of v1.6's open decisions — not the series cap,
+not the grayscale question, not the palette's identity. It is a shipped WCAG failure and a fix
+nobody can see.
+
+### Done criteria (v1.5.1)
+
+- [x] **Series 2 clears the graphical-object floor.** `#cf8636` measures **2.903:1** on
+      `EXPORT_BG` `#fffdf8` — below WCAG 1.4.11's 3:1 for graphical objects, i.e. the one colour
+      in chartsnap's output that provably excludes people. It is now `#ca8233`: **3.059:1**,
+      **ΔE00 1.37** from the original, hue held to 0.1° (68.0° → 67.9°) and chroma to 0.5
+      (56.7 → 56.2). Only lightness moves, by 1.6 L*. The "signature does not move" objection
+      does not survive the measurement — it moves by an amount nobody can see, with no original
+      alongside to compare against.
+      **Not `#cb8335`, which this SPEC drafted, and not `#cc8333`.** Both are nominally legal
+      (3.021:1, 3.011:1) and both **drop below 3:1 under a single 8-bit rounding step** — margins
+      of 0.7% and 0.35%, thinner than the quantisation grid they ship on. `#ca8233` holds ≥3:1
+      across its whole ±1 neighbourhood (3.022–3.097). Choosing between two moves nobody can see,
+      take the one that survives rounding.
+      **Must keep working** (run before the change): `#155e4c` does not move; no test pins the
+      ochre hex (`grep` — it lives only at `chart.ts:47`), so nothing was written to the change's
+      shape; `reproducibility.test.ts` and `png.test.ts` stay green, and the SVG smoke test still
+      finds real geometry.
+      **Asserted as a property:** every entry in `PALETTE` clears 3:1 against `EXPORT_BG`,
+      computed from the values themselves — so a colour cannot be added below the floor later.
+      Verified by rendering and looking, not only by arithmetic.
+
 ## v1.6 — the output excludes people (drafted 2026-07-16, NOT READY TO BUILD)
 
 The gap is real: a blind person gets nothing from this tool, a black-and-white printer merges
@@ -432,12 +461,6 @@ shape all three reviewers agree on:
       moment does a status element satisfy `textContent !== "" && (hidden || display === "none")`
       — checkable in jsdom, and **it goes red against today's code**. The word "announces" is
       earned by one NVDA and one VoiceOver pass recorded in LAUNCH.md, never by a green suite.
-- [ ] **Series 2 clears the graphical-object floor.** `#cf8636` measures 2.903:1 on `EXPORT_BG`,
-      failing WCAG 1.4.11's 3:1 for graphical objects. `#ca8233` is 3.059:1 and **ΔE00 1.37** from
-      the original — below the JND, with no original alongside to compare against. The "signature
-      does not move" objection does not survive the measurement: it moves by an amount nobody can
-      see, and the alternative is shipping the one colour in the output that provably excludes
-      people. Must keep working: `reproducibility.test.ts` stays green.
 - [ ] **No two series are the same colour to a colourblind reader.** This is the live defect and
       it is not in dispute: series 3 `#6b7f92` and series 5 `#8a8199` measure **ΔE00 2.24 under
       protanopia** (Machado 2009, severity 1.0, in linear RGB) — at the JND, i.e. the same
