@@ -432,9 +432,44 @@ shape all three reviewers agree on:
       moment does a status element satisfy `textContent !== "" && (hidden || display === "none")`
       — checkable in jsdom, and **it goes red against today's code**. The word "announces" is
       earned by one NVDA and one VoiceOver pass recorded in LAUNCH.md, never by a green suite.
-- [ ] **Series 2 clears the graphical-object floor.** `#cf8636` -> `#cb8335`: 2.90:1 -> 3.02:1 on
-      `EXPORT_BG`, a 3.1-luma move. Must keep working: it still reads as the same ochre beside the
-      pine, and `reproducibility.test.ts` stays green.
+- [ ] **Series 2 clears the graphical-object floor.** `#cf8636` measures 2.903:1 on `EXPORT_BG`,
+      failing WCAG 1.4.11's 3:1 for graphical objects. `#cb8335` is 3.021:1 and **ΔE00 1.08** from
+      the original — below the JND, with no original alongside to compare against. The "signature
+      does not move" objection does not survive the measurement: it moves by an amount nobody can
+      see, and the alternative is shipping the one colour in the output that provably excludes
+      people. Must keep working: `reproducibility.test.ts` stays green.
+- [ ] **No two series are the same colour — in grayscale OR to a colourblind reader — because the
+      chart never draws more series than can be told apart.** `MAX_SERIES` becomes **4**
+      (`detect.ts:6`); beyond 4, columns are named in `droppedSeries` as they already are (v1.3).
+      This *deletes* the problem rather than fixing it, and the arithmetic says it is the only
+      move: WCAG 1.4.11's 3:1 on `#fffdf8` caps a series at **L\* 61.2**, leaving a 36.2 L\* band,
+      so 6 series can never exceed **ΔL\* 7.23** pairwise (5 → 9.04), while ~10 is what a stroke
+      1.2–2.8 halftone cells wide needs — and at the Twitter card, ~1 cell, gray is not a channel
+      at all. 4 gives 12.05 and the constraint set becomes satisfiable.
+      **Two axes, both asserted over `PALETTE` itself, for every pair — not adjacent** (`PALETTE`
+      is in draw order; `[70,90,70,90,70,90]` passes an adjacency rule with three identical pairs):
+      (a) min pairwise **ΔL\*** ≥ 10 — **not BT.601 luma**, which weights blue 0.114 where it
+      carries 0.0722 of luminance: `#218ec7`/`#7d8778` are ΔY'601 14.4 apart and ΔL\* **0.8**, the
+      same gray. BT.601 also named the wrong worst pair here — it headlines s3/s4 (ΔL\* 1.0) while
+      **s5/s6 sit at ΔL\* 0.6**. (b) min pairwise **ΔE00 ≥ 15** after simulating deuteranopia *and*
+      protanopia (Machado 2009, severity 1.0, in linear RGB) — a separate axis, not a consequence,
+      and **the one already broken: s3/s5 measure ΔE00 2.2 for a protanope today**, i.e. the same
+      colour, for ~8% of men, on screen, now.
+      Ships `["#155e4c", "#ca8233", "#497f99", "#343463"]` — worst pair ΔL\* 10.0, ΔE00 deutan 22,
+      protan 25, hue spread 54°, contrasts 7.55 / 3.06 / 4.32 / 11.37. `#155e4c` does not move.
+      **Explicitly not doing: a `borderDash` ramp.** It works in no medium. `canvas2svg` has no
+      dash support (`STYLES`, `canvas2svg.js:106-146`) and `export.ts:88-96` shims `set/getLineDash`
+      into a sink that satisfies Chart.js and drops the data — measured, 0 `stroke-dasharray` in
+      15,127 valid bytes that pass **every** assertion in `test/svg.test.ts`. And in the PNG,
+      `chart.ts:183-184`'s `usePointStyle: true` routes the legend through `getStyle(0)` → *point*
+      options, where `borderDash` does not exist (measured `lineDash=undefined` on all six items),
+      and `pointStyle: "circle"` is a filled disc that could not show one anyway. Six dashed lines
+      with an unmappable key is not a fix.
+      **Later, not now:** hatched bar fills. `canvas2svg` *does* support `<pattern>`
+      (`canvas2svg.js:202`, `:354`), so patterns are the one redundant channel that survives both
+      media — but at `MAX_SERIES: 4` there is nothing left for them to fix.
+      **This is a product decision, not a defect fix:** it changes which charts render, and the
+      palette is the signature. Recorded, not taken.
 - [ ] **`--faint` stops failing AA** — by whichever of the two decisions above is taken.
 
 **Prerequisite for the whole section:** the dropzone is a `<section>` with an accessible name
