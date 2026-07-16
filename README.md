@@ -60,7 +60,10 @@ Then pick a size and download. PNG and SVG both, free, no watermark.
 
 Quoted commas, US and European numbers (`1,234.56` and `1.234,56`, decided per column),
 blank cells (drawn as gaps), big files (sampled down with a note), and files that aren't
-UTF-8 — a Big5 or Latin-1 export gets a "re-save as UTF-8" note instead of garbled text.
+UTF-8 — a Big5 or Latin-1 export still charts, with a note telling you why the labels came
+out as `���` and to re-save as UTF-8. It won't refuse your file: it can't reliably tell a
+whole mis-encoded export from two stray bytes in a good one, so it says what it saw and
+lets you decide.
 
 Dates it reads, and nothing else: `2025-01-05`, `2025-01`, `2025/01/05`, `2025-01-01T09:30:00Z`
 (and with an offset), `2025-01-01 09:30`, `March 2025`, `5 January 2025`, `Jan 5, 2025`, and

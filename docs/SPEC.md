@@ -191,15 +191,25 @@ because 100 is not a 4-digit year.
       ratio 1.000**, so no threshold of that shape can separate them. Only the absolute count
       does. `repl` is independent of file size for a header-only-Chinese file: a Big5
       `日期,營收` header yields repl=7 at 5 rows and repl=7 at 1,000.
-      **Must refuse** (all three pass today at 1,000 rows — the guard is worse than the SPEC
-      admits): Big5 header + 1,000 ASCII rows; Latin-1 with French names; UTF-16LE+BOM, i.e.
-      Excel's "Unicode Text" export.
-      **Must keep rendering:** valid UTF-8 Chinese with and without BOM; an emoji column; a real
-      UTF-8 file carrying one stray bad byte (repl=1, under the floor); a valid UTF-8 file
-      truncated mid-character at a chunk boundary.
+      **Must flag** (all three pass unflagged today at 1,000 rows — the guard is worse than the
+      SPEC admits): Big5 header + 1,000 ASCII rows; Latin-1 with French names; UTF-16LE+BOM,
+      i.e. Excel's "Unicode Text" export.
+      **Must stay silent:** valid UTF-8 Chinese with and without BOM; an emoji column; a real
+      UTF-8 file carrying one stray bad byte; a valid UTF-8 file truncated mid-character.
+      **A flag is a note, never a refusal** (decided 2026-07-16, after the guard was built). The
+      detector cannot separate two stray CP1252 bytes in a 5,000-row export from a two-character
+      Big5 header — a smart-quote *pair* scores 2, a `年,值` header scores 3, and counts alone
+      never will. So the consequence is what has to be safe. Refusing told a user their file
+      wasn't UTF-8 when it was, cost them the chart, and offered no override — the most
+      destructive act this tool has. As a note the asymmetry inverts: a false positive costs one
+      ignorable line, a true positive still gets the message, and the Big5 user gets what they
+      actually asked for, which was never a refusal but *a warning* — the original report was
+      "a chart renders and `notes` is empty — no warning of any kind." Mojibake is self-
+      announcing: `���,�禬` on an axis is not posted by mistake. The note describes the
+      *characters*, not the file, so it is true in both cases.
       **Known and accepted:** a Latin-1 file with exactly one accent is *provably* undecidable —
-      it is identical in (repl, valid) to a UTF-8 file with one stray byte — and the stray-byte
-      case wins. Re-earns the v1 criterion with a stronger claim than it originally made.
+      identical in (repl, valid) to a UTF-8 file with one stray byte — and the stray-byte case
+      wins. Re-earns the v1 criterion with a stronger claim than it originally made.
 
 - [x] **Every note is legible.** `.notes` uses `--muted` (#6c6659, 5.19:1 on paper), not
       `--faint` (#948d7c, **3.00:1** — fails WCAG AA at 12.8px). Measured, not eyeballed.

@@ -8,7 +8,8 @@
 // TextDecoder('big5' | 'latin1' | 'utf-16le') and checked against the text it should be,
 // before it is fed to decodeUtf8. A hand-guessed byte array proves nothing.
 import { describe, expect, it } from "vitest";
-import { decodeUtf8 } from "../src/csv";
+import { decodeUtf8, parseCsv } from "../src/csv";
+import { detectChart } from "../src/detect";
 
 const bytes = (...b: number[]) => new Uint8Array(b).buffer;
 const utf8 = (s: string) => new TextEncoder().encode(s).buffer;
@@ -35,7 +36,7 @@ describe("the fixtures are the encodings they claim to be", () => {
   });
 });
 
-describe("a mis-encoded file is refused at any size", () => {
+describe("a mis-encoded file is flagged at any size", () => {
   it("Big5 header + ASCII rows — the case the old rate-vs-length guard went blind on", () => {
     // The number of replacement chars is fixed by the header; only the denominator grew.
     for (const rows of [5, 200, 1000, 5000]) {
@@ -70,7 +71,37 @@ describe("a mis-encoded file is refused at any size", () => {
   });
 });
 
-describe("a real UTF-8 file is never refused", () => {
+describe("the flag never costs anyone their chart", () => {
+  // The detector cannot separate two stray CP1252 bytes from a two-character Big5 header by
+  // count, and it never will — so the guard's *consequence* is what has to be safe. A flagged
+  // file still charts; the flag is a note. That is why a false positive is survivable, and it
+  // is the whole reason the floor of 2 is allowed to be imperfect.
+  it("a Big5 file still parses into columns — the labels are mojibake, the data is intact", () => {
+    const file = join(BIG5_HEADER, asciiRows(1000));
+    const { text, looksNonUtf8 } = decodeUtf8(file);
+    expect(looksNonUtf8).toBe(true);
+    const parsed = parseCsv(text);
+    // Two columns, every row kept, the numbers read correctly, and a chart comes out. Only the
+    // names are garbage — visibly so, which is the point: nobody posts “���” by accident.
+    expect(parsed.columns).toHaveLength(2);
+    expect(parsed.columns[1].type).toBe("number");
+    expect(parsed.rowCount).toBe(1000);
+    expect(() => detectChart(parsed)).not.toThrow();
+    expect(parsed.columns[0].name).toMatch(/�/); // the header is mojibake, and looks it
+  });
+
+  it("a valid file carrying a smart-quote PAIR is flagged but still charts", () => {
+    // Quotes come in pairs, which is exactly what the floor of 2 doesn't survive. As a
+    // refusal this was fatal; as a note it costs one line the user can ignore.
+    const file = join(utf8("month,sales\n"), bytes(0x92), utf8("Jan,10\nFeb,20\nMar"), bytes(0x92), utf8(",30\n"));
+    expect(decodeUtf8(file).looksNonUtf8).toBe(true); // a false positive — the file IS UTF-8
+    const parsed = parseCsv(decodeUtf8(file).text);
+    expect(parsed.columns[1].type).toBe("number");
+    expect(parsed.columns[1].nums).toEqual([10, 20, 30]); // every number intact
+  });
+});
+
+describe("a real UTF-8 file is never flagged", () => {
   const cases: [string, ArrayBuffer][] = [
     ["Chinese, 1000 rows", join(utf8("月份,營收"), asciiRows(1000))],
     ["Chinese with a BOM", join(utf8("﻿月份,營收"), asciiRows(50))],

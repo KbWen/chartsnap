@@ -167,9 +167,20 @@ for (const btn of typeButtons) {
 }
 
 // ---- input handling -----------------------------------------------------
-function handleText(text: string, sourceTitle?: string): void {
+/**
+ * Shown when some bytes didn't decode as UTF-8. Deliberately describes the *characters*, not
+ * the file: a mostly-ASCII CSV carrying two stray CP1252 bytes trips the same detector as a
+ * wholly Big5 export, and telling the first user "this file isn't UTF-8" would be a falsehood
+ * about their own data. This sentence is true for both, and points the second at the fix.
+ */
+const UNDECODABLE_NOTE =
+  "Some characters didn't decode as UTF-8 — any label showing “�” is one of them. If the whole chart looks garbled, re-save the file as UTF-8 CSV (most spreadsheets: “Save As → CSV UTF-8”).";
+
+function handleText(text: string, sourceTitle?: string, extraNotes: string[] = []): void {
   try {
     const parsed = parseCsv(text);
+    // Ahead of the parser's own notes: if the labels are mojibake, that's the first thing to say.
+    parsed.notes.unshift(...extraNotes);
     render(parsed, sourceTitle);
   } catch (err) {
     if (err instanceof CsvError || err instanceof DetectError) {
@@ -186,17 +197,15 @@ function handleFile(file: File): void {
   reader.onload = () => {
     const buf = reader.result as ArrayBuffer;
     const { text, looksNonUtf8 } = decodeUtf8(buf);
-    if (looksNonUtf8) {
-      showStatus(
-        "This file doesn't look like UTF-8 text. Re-save it as UTF-8 CSV (most spreadsheets: “Save As → CSV UTF-8”) and try again.",
-        "error"
-      );
-      resultEl.hidden = true;
-      return;
-    }
-    // The file name becomes the chart title, and titles land in the exported SVG's markup.
+    // Chart it either way, and say what happened. Refusing was the most destructive thing this
+    // tool did, and it did it to files that ARE UTF-8: the detector cannot tell two stray
+    // CP1252 bytes in a 5,000-row export from a Big5 header, so a smart-quote pair — and quotes
+    // come in pairs — cost the user their chart and told them their file was something it
+    // wasn't, with no override. As a note the asymmetry inverts: a false positive costs one
+    // ignorable line, and a true positive still gets the message. Mojibake is self-announcing
+    // anyway — “���,�禬” on an axis is not a chart anyone posts by mistake.
     const base = scrub(file.name.replace(/\.[^.]+$/, ""));
-    handleText(text, base);
+    handleText(text, base, looksNonUtf8 ? [UNDECODABLE_NOTE] : []);
   };
   reader.onerror = () => showStatus("Could not read that file.", "error");
   reader.readAsArrayBuffer(file);
