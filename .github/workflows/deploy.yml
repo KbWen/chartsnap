@@ -24,7 +24,16 @@ jobs:
         with:
           node-version: 20
           cache: npm
+      # node-canvas (dev-only) — the SVG smoke test needs it, and that test is the tripwire
+      # for the vector export. This workflow and ci.yml both trigger on push, and Actions
+      # does no cross-workflow gating, so until now a red smoke test shipped to Pages anyway.
+      # Running the suite here costs a duplicate apt+test on main and buys a deploy that
+      # fails closed. Splitting it (hermetic tests here, canvas tests in ci.yml) was the
+      # first plan and does not work: nothing would stop a broken export from deploying,
+      # which is the whole point of the gate.
+      - run: sudo apt-get update && sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
       - run: npm ci
+      - run: npm test
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:

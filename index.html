@@ -3,6 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      The privacy claim, enforced by the browser instead of asserted by the copy.
+      connect-src 'none' is the load-bearing one: it kills fetch, XHR, sendBeacon and
+      WebSocket outright — including PapaParse's dormant NetworkStreamer XHR, which is
+      why reading the bundle (or a two-minute Network-tab check) can't prove much on its
+      own. blob: on img/media is what the PNG export needs; data: is for the canvas.
+      Pages can't set headers, and frame-ancestors is header-only — so that one is out.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'none'; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'"
+    />
     <title>chartsnap — CSV to chart, in your browser</title>
     <meta
       name="description"
@@ -26,8 +38,11 @@
         aria-label="Drop a CSV file here, or click to browse"
       >
         <div class="drop-inner">
-          <p class="drop-title">Drop a CSV here</p>
-          <p class="drop-sub">click to browse, or paste a CSV anywhere on the page</p>
+          <!-- Lead with the action that works on every device. "Drop a CSV here" was the
+               headline, and drag-and-drop does not exist on a phone — so the loudest thing
+               on the page was an instruction half the visitors cannot follow. -->
+          <p class="drop-title">Choose a CSV</p>
+          <p class="drop-sub">or drop one in, or paste a CSV anywhere on the page</p>
           <input id="file" type="file" accept=".csv,text/csv,text/plain" hidden />
         </div>
       </section>

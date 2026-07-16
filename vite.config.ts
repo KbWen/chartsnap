@@ -1,5 +1,6 @@
 /// <reference types="vitest/config" />
-import { readdirSync, statSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, posix, relative, sep } from "node:path";
 import { defineConfig, type Plugin } from "vitest/config";
 
@@ -53,6 +54,27 @@ self.addEventListener("fetch", (event) => {
 }
 
 /**
+ * Version the cache by the CONTENT of everything precached, not by the hashed JS filename.
+ *
+ * The filename was a tempting proxy — it rotates whenever any imported code changes, CSS
+ * included, since main.ts imports the stylesheet. But index.html is not content-hashed and
+ * is imported by nothing, so a change to it alone (the copy, the footer link, a meta tag)
+ * left sw.js byte-identical. The browser byte-compares sw.js to decide whether a worker is
+ * new, saw no change, never re-precached, and offline visitors stayed on the old page
+ * indefinitely — the one class of user the worker exists for.
+ *
+ * Hashing content rather than mtimes keeps the build reproducible: same input, same sw.js.
+ */
+function precacheVersion(outDir: string, files: string[]): string {
+  const h = createHash("sha256");
+  for (const f of [...files].sort()) {
+    h.update(f);
+    h.update(readFileSync(join(outDir, f)));
+  }
+  return h.digest("hex").slice(0, 16);
+}
+
+/**
  * Emits sw.js listing the real build output. Written in closeBundle so every asset,
  * including index.html, already exists on disk — no hardcoded filenames to drift.
  */
@@ -66,11 +88,8 @@ function serviceWorker(): Plugin {
     },
     closeBundle() {
       const files = builtFiles(outDir).filter((f) => f !== "sw.js");
-      // The hashed JS bundle name is a precise version for the cache: it changes whenever
-      // any of our code changes, and never otherwise.
-      const version = files.find((f) => /^assets\/.*\.js$/.test(f))?.replace(/\W/g, "") ?? "dev";
       const urls = ["./", ...files.map((f) => `./${f}`)];
-      writeFileSync(join(outDir, "sw.js"), serviceWorkerSource(version, urls));
+      writeFileSync(join(outDir, "sw.js"), serviceWorkerSource(precacheVersion(outDir, files), urls));
     },
   };
 }

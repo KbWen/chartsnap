@@ -3,7 +3,7 @@ import { Chart } from "chart.js";
 import { buildConfig } from "./chart";
 import { CsvError, decodeUtf8, parseCsv, scrub } from "./csv";
 import { DetectError, detectChart, feasibleTypes } from "./detect";
-import { downloadBlob, exportPng, exportSvg, PRESETS, renderSvgString } from "./export";
+import { downloadBlob, exportPng, exportSvg, PRESETS, renderSvgString, shareFile } from "./export";
 import type { ChartType, Detection, ExportPreset, ParsedCsv } from "./types";
 // Bundled sample CSVs, inlined at build time (?raw) so "try a sample" needs no network.
 import sampleLine from "../samples/monthly-sales.csv?raw";
@@ -68,7 +68,12 @@ function autoTitle(d: Detection): string {
   return `${ys.join(", ")} by ${d.xColumn.name}`;
 }
 
-/** Downscale a preset to a snappy preview size while keeping aspect + font ratios. */
+/**
+ * Downscale a preset to a snappy preview size, keeping its aspect ratio. Font ratios are kept
+ * by `buildConfig`'s `basis`, which sizes type from the preset and then applies this same
+ * downscale — this function alone can't promise it, and the comment that used to say it could
+ * was false for two presets.
+ */
 function previewSize(p: ExportPreset): { w: number; h: number } {
   const MAX = 1400;
   const k = Math.min(1, MAX / Math.max(p.width, p.height));
@@ -87,6 +92,7 @@ function renderPreview(): void {
     title: state.title,
     width: w,
     height: h,
+    basis: preset.width, // size type from the preset, so the preview matches the download
   });
   config.options = {
     ...config.options,
@@ -161,9 +167,20 @@ for (const btn of typeButtons) {
 }
 
 // ---- input handling -----------------------------------------------------
-function handleText(text: string, sourceTitle?: string): void {
+/**
+ * Shown when some bytes didn't decode as UTF-8. Deliberately describes the *characters*, not
+ * the file: a mostly-ASCII CSV carrying two stray CP1252 bytes trips the same detector as a
+ * wholly Big5 export, and telling the first user "this file isn't UTF-8" would be a falsehood
+ * about their own data. This sentence is true for both, and points the second at the fix.
+ */
+const UNDECODABLE_NOTE =
+  "Some characters didn't decode as UTF-8 — any label showing “�” is one of them. If the whole chart looks garbled, re-save the file as UTF-8 CSV (most spreadsheets: “Save As → CSV UTF-8”).";
+
+function handleText(text: string, sourceTitle?: string, extraNotes: string[] = []): void {
   try {
     const parsed = parseCsv(text);
+    // Ahead of the parser's own notes: if the labels are mojibake, that's the first thing to say.
+    parsed.notes.unshift(...extraNotes);
     render(parsed, sourceTitle);
   } catch (err) {
     if (err instanceof CsvError || err instanceof DetectError) {
@@ -180,17 +197,15 @@ function handleFile(file: File): void {
   reader.onload = () => {
     const buf = reader.result as ArrayBuffer;
     const { text, looksNonUtf8 } = decodeUtf8(buf);
-    if (looksNonUtf8) {
-      showStatus(
-        "This file doesn't look like UTF-8 text. Re-save it as UTF-8 CSV (most spreadsheets: “Save As → CSV UTF-8”) and try again.",
-        "error"
-      );
-      resultEl.hidden = true;
-      return;
-    }
-    // The file name becomes the chart title, and titles land in the exported SVG's markup.
+    // Chart it either way, and say what happened. Refusing was the most destructive thing this
+    // tool did, and it did it to files that ARE UTF-8: the detector cannot tell two stray
+    // CP1252 bytes in a 5,000-row export from a Big5 header, so a smart-quote pair — and quotes
+    // come in pairs — cost the user their chart and told them their file was something it
+    // wasn't, with no override. As a note the asymmetry inverts: a false positive costs one
+    // ignorable line, and a true positive still gets the message. Mojibake is self-announcing
+    // anyway — “���,�禬” on an axis is not a chart anyone posts by mistake.
     const base = scrub(file.name.replace(/\.[^.]+$/, ""));
-    handleText(text, base);
+    handleText(text, base, looksNonUtf8 ? [UNDECODABLE_NOTE] : []);
   };
   reader.onerror = () => showStatus("Could not read that file.", "error");
   reader.readAsArrayBuffer(file);
@@ -285,7 +300,12 @@ dlPng.addEventListener(
     if (!state) return;
     const preset = currentPreset();
     const blob = await exportPng(state.parsed, state.detection, state.title, preset);
-    downloadBlob(blob, `chartsnap-${preset.id}.png`);
+    const name = `chartsnap-${preset.id}.png`;
+    // On a phone the share sheet is the only route to the camera roll, and the camera roll is
+    // the only route into Instagram. Only "unavailable" falls back to a download — dismissing
+    // the sheet is an answer, and downloading anyway would be the file-in-Files dead end this
+    // exists to remove, delivered against the user's stated wish.
+    if ((await shareFile(blob, name)) === "unavailable") downloadBlob(blob, name);
   })
 );
 

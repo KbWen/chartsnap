@@ -18,12 +18,25 @@ export function decodeUtf8(buffer: ArrayBuffer): { text: string; looksNonUtf8: b
   const text = new TextDecoder("utf-8", { fatal: false }).decode(buffer);
   // Counted in a loop rather than via text.match(/�/g), which would allocate one
   // string per hit — a mis-encoded multi-MB file is almost all replacement chars.
-  let replacements = 0;
+  let repl = 0;
+  let valid = 0;
   for (let i = 0; i < text.length; i++) {
-    if (text.charCodeAt(i) === 0xfffd) replacements++;
+    const c = text.charCodeAt(i);
+    if (c === 0xfffd) repl++;
+    else if (c > 0x7f) valid++; // else-if: U+FFFD is itself non-ASCII, and isn't evidence of success
   }
-  // A few replacement chars can be incidental; a high rate means wrong encoding.
-  const looksNonUtf8 = replacements > 0 && replacements / Math.max(text.length, 1) > 0.002;
+  // Weigh the bytes that failed to decode against the ones that succeeded — not against the
+  // file's length. A Big5 export whose Chinese sits in the header has a fixed number of
+  // replacements and an unbounded number of ASCII data rows, so a rate against length decays
+  // to nothing (measured: caught at 200 rows, blind at 1,000). A rate against non-ASCII fails
+  // the other way: Big5, Latin-1, UTF-16LE and a good UTF-8 file carrying one stray byte all
+  // score 1.0, so no threshold separates them. Only the absolute count does.
+  //
+  // The floor of 2 is what keeps one stray byte (a CP1252 smart quote out of Word, the
+  // commonest near-UTF-8 artifact there is) from getting a real file refused. It costs us
+  // Latin-1 files with exactly one accent — provably undecidable, since they are identical
+  // here to that stray byte — and we'd rather render those than refuse a good file.
+  const looksNonUtf8 = repl >= 2 && repl > valid;
   return { text, looksNonUtf8 };
 }
 
@@ -138,6 +151,41 @@ function numberWarning(column: string, style: NumberStyle): string | null {
 /** "2019", "2025-01", "2025-01-05" — a calendar date carrying no time and no offset. */
 const CALENDAR_DATE = /^(\d{4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?$/;
 
+const MONTH_NAME =
+  "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t)?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?";
+
+/**
+ * The only shapes allowed to reach `Date.parse`.
+ *
+ * `Date.parse` is spec-defined for ISO 8601 and engine-defined for everything else, and the
+ * engine-defined half guesses silently: "Jan-25" (Excel's default) becomes 25 Jan 2001,
+ * "45%" becomes 2045-01-01 and takes over the x axis, "114/01/05" (民國) becomes year 114 AD.
+ * Dropping `Date.parse` would take ISO instants with it — and with them every timestamped
+ * export on earth, which would fall to a category and be drawn as equal-width bars. So gate
+ * its *input* instead. Anything not listed here is a category: honest, and deterministic.
+ */
+const DAY_NAME = "mon|tue|wed|thu|fri|sat|sun";
+/** `Z`, `+08:00`, `+0800`, `+08`, or a spelled-out zone. ISO 8601 permits the bare `±hh`. */
+const OFFSET = "(?:Z|[+-]\\d{2}(?::?\\d{2})?|\\s*(?:UTC|GMT(?:[+-]\\d{2}:?\\d{2})?))";
+/** `9:30`, `09:30:00`, `09:30:00.123456` — unpadded hours and any fraction. */
+const TIME = "\\d{1,2}:\\d{2}(?::\\d{2}(?:\\.\\d+)?)?";
+
+const PARSEABLE: RegExp[] = [
+  // ISO / SQL date-time, `T` or space, padded or not, optional offset or named zone. Covers
+  // psql timestamptz, BigQuery, pandas, sqlite, Sheets.
+  new RegExp(`^\\d{4}-\\d{1,2}-\\d{1,2}[T ]${TIME}\\s*(?:${OFFSET})?$`, "i"),
+  // Year-first slash dates, with or without a time: unambiguous, unlike 01/02/2025 (SPEC "Later").
+  new RegExp(`^\\d{4}/\\d{1,2}/\\d{1,2}(?:[T ]${TIME}\\s*(?:${OFFSET})?)?$`, "i"),
+  new RegExp(`^(?:${MONTH_NAME})\\.? \\d{4}$`, "i"), // March 2025
+  new RegExp(`^\\d{1,2} (?:${MONTH_NAME})\\.? \\d{4}$`, "i"), // 5 January 2025
+  new RegExp(`^(?:${MONTH_NAME})\\.? \\d{1,2},? \\d{4}$`, "i"), // Jan 5, 2025 — and without the comma
+  // RFC 2822, and JS's own Date.toString(). Both turn up in exports written by hand.
+  new RegExp(
+    `^(?:${DAY_NAME}),? (?:\\d{1,2} (?:${MONTH_NAME})|(?:${MONTH_NAME}) \\d{1,2}) \\d{4}(?: ${TIME})?(?:\\s*${OFFSET})?$`,
+    "i"
+  ),
+];
+
 /**
  * A bare 4-digit number only means a year when the header says it does. Otherwise a
  * `count` column of 2000, 2010, 2020 turns into a time axis, and 1898 charts differently
@@ -167,6 +215,8 @@ function cleanTime(s: string, bareYearOk: boolean): number {
 
   // Don't let bare numbers (counts, ids) masquerade as dates.
   if (/^-?\d+(\.\d+)?$/.test(t)) return NaN;
+  // Everything else must look like something we recognise before Date.parse may guess at it.
+  if (!PARSEABLE.some((re) => re.test(t))) return NaN;
   const ms = Date.parse(t);
   return Number.isNaN(ms) ? NaN : ms;
 }
@@ -218,6 +268,24 @@ function sampleIndices(n: number, target: number): number[] {
  */
 const XML_ILLEGAL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
 export const scrub = (s: string): string => s.replace(XML_ILLEGAL, "");
+
+/**
+ * A column of things that look like dates but that chartsnap won't guess at.
+ *
+ * Refusing to guess is right — `01/02/2025` is 1 Feb to most of the world and 2 Jan to the US,
+ * and the old code picked one silently. But *falling to text without a word* is the same sin
+ * wearing different clothes: the column becomes a category, `detect` draws a bar chart of date
+ * strings, and `droppedSeries` can't say so because it only ever holds numeric columns. So the
+ * one thing this must not be is quiet.
+ */
+function unreadDateNote(column: string, raw: string[]): string | null {
+  const cells = raw.map((c) => c.trim()).filter((c) => c !== "");
+  if (cells.length === 0) return null;
+  // Cells a lenient parser would have taken and we deliberately would not.
+  const refused = cells.filter((c) => !Number.isNaN(Date.parse(c)) && Number.isNaN(cleanTime(c, false)));
+  if (refused.length / cells.length < TYPE_THRESHOLD) return null;
+  return `“${column}” looks like dates in a format that could be read more than one way (e.g. “${refused[0]}”), so it's charted as plain text rather than guessed at. Re-save it as YYYY-MM-DD for a time axis.`;
+}
 
 /** A line that carried no fields at all — a truly blank line, not a row of blank cells. */
 const isBlankLine = (row: string[]): boolean => row.length <= 1 && !(row[0] ?? "").trim();
@@ -287,6 +355,11 @@ export function parseCsv(text: string): ParsedCsv {
     if (worthSaying) {
       const warning = numberWarning(name, style);
       if (warning) notes.push(warning);
+    }
+    // A date column that fell to text has no other way to announce itself.
+    if (type === "category") {
+      const unread = unreadDateNote(name, raw);
+      if (unread) notes.push(unread);
     }
     return { name, type, raw, nums, times, bareYears };
   });

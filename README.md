@@ -17,8 +17,9 @@ The usual options are all a bit annoying: Excel looks like Excel, Datawrapper an
 Flourish want a login and put SVG behind a paywall, RAWGraphs makes you map every axis
 by hand, and pasting company numbers into a chatbot means they've left your laptop.
 
-chartsnap keeps it local and boring: drop, chart, download. It works offline, nothing
-uploads, and the same CSV always gives you the same chart. SVG export is free.
+chartsnap keeps it local and boring: drop, chart, download. Nothing uploads, it works
+offline once loaded, and the same CSV gives you the same chart every time on your machine.
+SVG export is free.
 
 ## Try it
 
@@ -58,13 +59,26 @@ Then pick a size and download. PNG and SVG both, free, no watermark.
 ## What it handles
 
 Quoted commas, US and European numbers (`1,234.56` and `1.234,56`, decided per column),
-dates that mean the same day in every timezone, blank cells (drawn as gaps), big files
-(sampled down with a note), and files that aren't UTF-8 (you get a "re-save as UTF-8"
-note instead of garbled text).
+blank cells (drawn as gaps), big files (sampled down with a note), and files that aren't
+UTF-8 — a Big5 or Latin-1 export still charts, with a note telling you why the labels came
+out as `���` and to re-save as UTF-8. It won't refuse your file: it can't reliably tell a
+whole mis-encoded export from two stray bytes in a good one, so it says what it saw and
+lets you decide.
 
-It works offline once you've loaded it — a service worker keeps the page and its assets
-on your machine. The same CSV always produces the same chart, down to identical bytes in
-the exported PNG and SVG. If a numeric column doesn't fit on the chart, it says which.
+Dates it reads, and nothing else: `2025-01-05`, `2025-01`, `2025/01/05`, `2025-01-01T09:30:00Z`
+(and with an offset), `2025-01-01 09:30`, `March 2025`, `5 January 2025`, `Jan 5, 2025`, and
+4-digit years under a `year` header. Bare calendar dates mean the same day in every timezone.
+Anything else — `01/02/2025`, `Jan-25`, `114/01/05` — is treated as text rather than guessed
+at, because the guesses were silently wrong (`Jan-25` used to chart as 25 January **2001**).
+
+It works offline once you've loaded it — a service worker keeps the page and its assets on
+your machine. A dead connection falls back to that copy; a connection that hangs rather than
+failing, or a captive portal that answers with its own login page, can still stall the load.
+
+On the same machine and browser, the same CSV produces the same chart, down to identical
+bytes in the exported PNG and SVG. Across machines it won't: `system-ui` resolves to a
+different font per OS, and the label positions are measured from it. If a numeric column
+doesn't fit on the chart, it says which.
 
 ## What it isn't
 

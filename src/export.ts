@@ -6,6 +6,9 @@ import type { Detection, ExportPreset, ParsedCsv } from "./types";
 export const PRESETS: ExportPreset[] = [
   { id: "twitter", label: "Twitter card · 1200×675", width: 1200, height: 675 },
   { id: "instagram", label: "IG post · 1080×1080", width: 1080, height: 1080 },
+  // Stories is the thing people actually post from a phone, and a 1:1 export letterboxes
+  // into it with grey bands. The layout code already handles portrait.
+  { id: "story", label: "IG story · 1080×1920", width: 1080, height: 1920 },
   // A4 landscape at 300 DPI — crisp enough to drop into a printed report.
   { id: "a4print", label: "A4 print · 3508×2480", width: 3508, height: 2480 },
 ];
@@ -63,6 +66,12 @@ export async function exportPng(
     return blob;
   } finally {
     chart.destroy();
+    // destroy() tears down Chart.js state but leaves the backing store — 34.8 MB at the A4
+    // preset — alive until GC gets round to it. Mobile Safari budgets total canvas memory
+    // and kills the tab when it's exceeded, so release it now rather than stacking one per
+    // export. Zeroing the dimensions is the documented way to free it immediately.
+    canvas.width = 0;
+    canvas.height = 0;
   }
 }
 
@@ -169,6 +178,42 @@ export function exportSvg(
 ): Blob {
   const svg = renderSvgString(parsed, detection, title, preset);
   return new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+}
+
+/** `declined` is the user closing the share sheet — it is a decision, not a failure. */
+export type ShareResult = "shared" | "declined" | "unavailable";
+
+/**
+ * Hand the file to the OS share sheet when there is one, so the PNG can reach Photos (and
+ * from there Instagram) in one tap. `downloadBlob` alone dead-ends on a phone: iOS Safari
+ * does honour `<a download>` on a blob:, but the file lands in Files, and Instagram's
+ * composer reads only the Photo Library — so the chart the tool exists to make cannot be
+ * posted from the device people post from.
+ *
+ * Three states, not a boolean. A boolean merged "no sheet here" with "the user said no", and
+ * the caller fell back to a download for both — so dismissing the sheet dropped an unwanted
+ * file on the device anyway. The comment right here used to say that was the thing to avoid
+ * while the code did it.
+ */
+export async function shareFile(blob: Blob, filename: string): Promise<ShareResult> {
+  const nav = navigator as Navigator & {
+    canShare?: (d: ShareData) => boolean;
+    share?: (d: ShareData) => Promise<void>;
+  };
+  if (typeof File !== "function" || !nav.canShare || !nav.share) return "unavailable";
+  const file = new File([blob], filename, { type: blob.type });
+  // Desktop Chrome/Firefox report no file sharing, which is the right answer — a download is
+  // better there anyway.
+  if (!nav.canShare({ files: [file] })) return "unavailable";
+  try {
+    await nav.share({ files: [file] });
+    return "shared";
+  } catch (err) {
+    // AbortError is the user dismissing the sheet. Anything else (NotAllowedError, a
+    // WebView with a broken implementation) means sharing didn't work, so a download is the
+    // honest fallback.
+    return (err as { name?: string } | null)?.name === "AbortError" ? "declined" : "unavailable";
+  }
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {
