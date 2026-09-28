@@ -53,7 +53,8 @@ setting, and that's on purpose.
 Then pick a size and download. PNG and SVG both, free, no watermark.
 
 - Twitter — 1200 × 675
-- Instagram — 1080 × 1080
+- Instagram post — 1080 × 1080
+- Instagram story — 1080 × 1920
 - A4 print — 3508 × 2480 (300 DPI)
 
 ## What it handles
@@ -79,6 +80,8 @@ On the same machine and browser, the same CSV produces the same chart, down to i
 bytes in the exported PNG and SVG. Across machines it won't: `system-ui` resolves to a
 different font per OS, and the label positions are measured from it. If a numeric column
 doesn't fit on the chart, it says which.
+
+Accessible by design: the dropzone is a keyboard-interactive button, chart titles exist in the DOM as real headings, charts include an accessible summary and synchronized data table for screen readers, and notes/status are permanent live regions.
 
 ## What it isn't
 
