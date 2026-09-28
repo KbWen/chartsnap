@@ -31,6 +31,18 @@
   box-sizing: border-box;
 }
 
+/* Visually hidden for screen readers without hiding from the accessibility tree */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
 body {
   margin: 0;
   background: var(--paper);
@@ -82,6 +94,10 @@ main {
 
 /* ---- dropzone: hairline + restrained dashed, not a big bubbly card ---- */
 .dropzone {
+  display: block;
+  width: 100%;
+  font-family: inherit;
+  color: inherit;
   border: 1.5px dashed var(--line-strong);
   border-radius: var(--r);
   background: var(--card);
@@ -103,7 +119,12 @@ main {
   background: var(--accent-tint);
 }
 
+.drop-inner {
+  display: block;
+}
+
 .drop-title {
+  display: block;
   margin: 0;
   font-size: 1.15rem;
   font-weight: 600;
@@ -111,6 +132,7 @@ main {
 }
 
 .drop-sub {
+  display: block;
   margin: 7px 0 0;
   font-family: var(--font-mono);
   font-size: 0.82rem;
@@ -197,7 +219,17 @@ main {
   border-color: transparent;
 }
 
-/* ---- status ---- */
+/* ---- status & notes: permanent live regions ---- */
+.status:empty,
+.notes:empty {
+  display: block;
+  height: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  overflow: hidden;
+}
+
 .status {
   margin: 16px 0 0;
   padding: 11px 15px;
@@ -215,6 +247,16 @@ main {
   background: var(--info-bg);
   color: var(--info-ink);
   border: 1px solid #cfe3e6;
+}
+
+.notes {
+  margin: 16px 0 0;
+  font-family: var(--font-mono);
+  /* --muted (5.19:1), not --faint (3.00:1, fails AA at this size). These lines are the only
+     warning that a chart may be wrong — an unreadable warning is not a warning. */
+  color: var(--muted);
+  font-size: 0.8rem;
+  white-space: pre-line;
 }
 
 /* ---- result ---- */
@@ -246,20 +288,6 @@ main {
   margin: 0;
   font-size: 0.98rem;
   color: var(--ink);
-}
-
-.notes {
-  margin: 0 0 16px;
-  font-family: var(--font-mono);
-  /* --muted (5.19:1), not --faint (3.00:1, fails AA at this size). These lines are the only
-     warning that a chart may be wrong — an unreadable warning is not a warning. */
-  color: var(--muted);
-  font-size: 0.8rem;
-  white-space: pre-line;
-}
-
-.notes:empty {
-  display: none;
 }
 
 /* ---- chart-type override (escape hatch) ---- */

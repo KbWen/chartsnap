@@ -31,21 +31,21 @@
     </header>
 
     <main>
-      <section
+      <button
+        type="button"
         id="drop"
         class="dropzone"
-        tabindex="0"
-        aria-label="Drop a CSV file here, or click to browse"
+        aria-label="Choose a CSV file, drop one in, or paste a CSV anywhere on the page"
       >
-        <div class="drop-inner">
+        <span class="drop-inner">
           <!-- Lead with the action that works on every device. "Drop a CSV here" was the
                headline, and drag-and-drop does not exist on a phone — so the loudest thing
                on the page was an instruction half the visitors cannot follow. -->
-          <p class="drop-title">Choose a CSV</p>
-          <p class="drop-sub">or drop one in, or paste a CSV anywhere on the page</p>
+          <span class="drop-title">Choose a CSV</span>
+          <span class="drop-sub">or drop one in, or paste a CSV anywhere on the page</span>
           <input id="file" type="file" accept=".csv,text/csv,text/plain" hidden />
-        </div>
-      </section>
+        </span>
+      </button>
 
       <div class="samples">
         <span class="samples-label">no CSV handy?</span>
@@ -64,9 +64,15 @@
         <button id="paste-render" type="button" class="btn">Render pasted CSV</button>
       </details>
 
-      <p id="status" class="status" role="status" hidden></p>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <p id="notes" class="notes" role="status" aria-live="polite"></p>
 
       <section id="result" class="result" hidden>
+        <div id="sr-container" class="sr-only">
+          <h2 id="chart-title"></h2>
+          <p id="sr-summary"></p>
+          <table id="sr-table"></table>
+        </div>
         <div class="readout">
           <span class="readout-label">detected</span>
           <p id="info" class="info"></p>
@@ -77,7 +83,6 @@
           <button type="button" class="type-btn" data-type="bar">bar</button>
           <button type="button" class="type-btn" data-type="scatter">scatter</button>
         </div>
-        <p id="notes" class="notes"></p>
 
         <div class="preview-wrap">
           <canvas id="preview" aria-label="Chart preview"></canvas>

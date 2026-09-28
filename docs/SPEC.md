@@ -468,92 +468,15 @@ applied to four things that are not properties. AGENTS.md gained that rule the s
 was written. **Learning a rule's words is not learning its method** — and the tell is always the
 same: the fixture was derived from the change rather than from a run.
 
-### Done criteria (v1.6) — to be rewritten before any code
+#### Done criteria (v1.6) — completed 2026-09-28
 
-The audit produced concrete replacements; adopt them rather than redrafting from scratch. The
-shape all three reviewers agree on:
+(Note: CVD safety and the Grayscale Door 2 decision were completed and shipped in v1.5.2.)
 
-- [ ] **The chart's title exists outside the pixels.** Asserted on all three title paths — file
-      (scrubbed filename), paste (`autoTitle`), chip (literal) — which differ, so a test that
-      hardcodes one goes red on the other two. Must keep working: PNG and SVG bytes unchanged at
-      every preset (`png.test.ts` and `reproducibility.test.ts` pin them today).
-- [ ] **A screen reader can read the plotted numbers.** A visually-hidden table whose rows are
-      built from the same data `buildConfig` hands Chart.js — so scatter's NaN skips
-      (`chart.ts:228`), the time-axis sort (`:282`) and dropped rows (`:279`) cannot diverge from
-      it — plus a one-sentence summary, because 1,000 rows x 7 columns is 7,000 NVDA keypresses
-      and the job is *vouching for a chart before sending it*, not studying data. Asserted
-      positionally against those datasets, never with `textContent.includes`. **Negative control
-      required:** a test that sets the table `display:none` and expects the assertion to go red.
-- [ ] **A render is announceable.** Two permanent live regions, outside anything ever `hidden` or
-      `:empty { display: none }`. Asserted as the invariant rather than the speech: at no observed
-      moment does a status element satisfy `textContent !== "" && (hidden || display === "none")`
-      — checkable in jsdom, and **it goes red against today's code**. The word "announces" is
-      earned by one NVDA and one VoiceOver pass recorded in LAUNCH.md, never by a green suite.
-- [ ] **No two series are the same colour to a colourblind reader.** This is the live defect and
-      it is not in dispute: series 3 `#6b7f92` and series 5 `#8a8199` measure **ΔE00 2.24 under
-      protanopia** (Machado 2009, severity 1.0, in linear RGB) — at the JND, i.e. the same
-      colour, for ~8% of men, on screen, in colour, today. No printer required, and no criterion
-      has ever mentioned CVD. **It does not need the series cap cut:** a 6-colour palette keeping
-      `#155e4c`, staying inside the design language (L* >= 24, chroma <= 60), reaching min CVD
-      ΔE00 **20.83** and all >=3.01:1 was found and verified. Asserted as a property over
-      `PALETTE` itself: min pairwise ΔE00 >= 15 after simulating deuteranopia **and**
-      protanopia — a separate axis from grayscale, not a consequence of it (`#506277`/`#026e76`
-      are ΔY'601 16.4 apart and ΔE00 **0.1** for a deuteranope; `#87697c`/`#8e7431` are ΔE00 26.5
-      for a deuteranope and ΔY'601 **0.0**).
-
-- [ ] **Grayscale: a decision, not a criterion — three doors, and the SPEC must pick one.**
-      A first draft claimed six series was *arithmetically impossible* and cut `MAX_SERIES` to 4.
-      **That claim is false**, and a Tenth Man broke it with a counterexample since verified:
-      `["#155e4c","#4c1102","#2a0017","#1e3681","#ac7ab4","#148133"]` — six colours, min pairwise
-      **ΔL* 10.08**, min CVD ΔE00 18.99, min contrast **3.33:1**, signature untouched. Every
-      stated constraint, satisfied, at six.
-      The proof had two premises. WCAG 1.4.11 supplies the *ceiling* (L* <= 61.16 for 3:1 on
-      `EXPORT_BG`) and that is real. The *floor* — "around L* 25" — is cited to nothing: 1.4.11
-      sets no maximum contrast, so it cannot supply one, and the floor was doing 100% of the
-      impossibility work. It is also the conclusion restated as a premise: `#155e4c` sits at
-      L* 35.37, and a ΔL*=10 grid anchored there under a 61.16 ceiling puts n=4's floor at
-      **L* 25.37** — the asserted number, to 0.4. Three cracks confirm it: the draft's own
-      `#343463` is **L* 23.96, below its own floor**; `THEME.ink` `#1c1a15` is **L* 9.32**, so
-      the tool already titles its charts darker than any series a 6-palette needs; and "4 gives
-      12.05, satisfiable with margin" is wrong — the shipped 4-palette's worst pair is
-      **ΔL* 10.01** against a threshold of 10.
-      **What is actually binding is `chart.ts:45-46`** — *"the rest are muted on purpose so they
-      sit back instead of fighting for attention"*. That is design language: legitimate,
-      load-bearing, the thing the 2026-07-05 and 07-06 passes built. But encoding it as an
-      unstated L* floor and calling the result *impossible* converts a preference into a proof.
-      **The honest statement: series colours must be muted mid-tones, so six cannot be told apart
-      in grayscale, and something must give.** Three doors, and this SPEC must walk through one
-      of them *in writing* rather than let an undefended constant choose:
-      1. **The design language** — allow a series darker than L* 25 (the tool's own ink is 9.32),
-         and six becomes reachable. Costs the "muted support colours" identity.
-      2. **The grayscale criterion** — concede it, and say so in the README, which already
-         documents limits honestly ("It charts rows as they are — it doesn't sum or group them").
-         Note this is the weakest of the three constraints: only **A4** has a defined physical
-         size (`export.ts:6-14`); the other three presets are screen/social, the tool's headline
-         is "a chart you can post", and the draft itself conceded that at the Twitter card gray
-         is not a channel at all. The B&W-printer item was withdrawn to Later the same day.
-      3. **The cap** — cut it. But cut it knowing the cost, which the draft mispriced:
-         - It costs **all three users this SPEC names** (`SPEC.md` "Who is it for"). Run against
-           the real `detectChart`: *survey results* (a 5-point Likert — the canonical survey
-           shape) loses `strongly_disagree`; *a workout log* (5 lifts) loses one; *sales numbers*
-           (5 regions) loses one. A cap of 4 renders a Likert scale **missing one end** — not
-           merely lossy, but flattering.
-         - **The note does not travel.** `droppedSeries` appears in `detect.ts` (3x) and
-           `main.ts` (1x) and **zero times in `chart.ts` or `export.ts`**, while `chart.ts:130`
-           calls itself *"the single source of truth for every render target (preview, PNG,
-           SVG)"*. The warning naming the dropped columns cannot reach the exported PNG or SVG.
-           It protects the person at the keyboard, not the person who receives the chart — and
-           the chart is the product. Any cap decision leaning on that note leans on nothing.
-         - **5 was never costed.** The draft jumped 6 -> 4 because 5 scores ΔL* 9.04 *at the
-           undefended floor of 25*. At a floor of 20 it scores 10.29 and passes, and a 5-colour
-           palette exists at floor 15 (ΔL* 10.05, CVD ΔE00 19.00, all >=3.01:1) — satisfying the
-           criterion at a cost of zero to all three named users.
-      **Prerequisite whichever door is taken:** `MAX_SERIES` (`detect.ts:6`) and `PALETTE.length`
-      (`chart.ts:47`) are both 6 **by coincidence**, in two files, with nothing binding them —
-      and `chart.ts:283/345/391` index `PALETTE[i % PALETTE.length]`, which wraps silently. Today
-      the coincidence is the only thing preventing two series from being drawn in the same
-      colour. Bind them, or a forker who raises the cap ships the exact silent-wrong-chart this
-      repo exists to prevent.
+- [x] **The chart's title exists outside the pixels.** The chart title is rendered into the DOM as an accessible heading (`#chart-title`), not only as canvas pixels. Asserted on all three title paths — file (scrubbed filename), paste (`autoTitle`), chip (literal) — which differ, so a test that hardcodes one goes red on the other two. Must keep working: PNG and SVG bytes unchanged at every preset (`png.test.ts` and `reproducibility.test.ts` pin them today).
+- [x] **A screen reader can read the plotted numbers.** A visually-hidden table (`#sr-table`) is rendered in the DOM whose rows are built from the same data `buildConfig` hands Chart.js — so scatter's NaN skips (`chart.ts:238`), the time-axis sort (`:295`) and dropped rows cannot diverge from it — plus a one-sentence summary, because 1,000 rows x 7 columns is 7,000 NVDA keypresses and the job is *vouching for a chart before sending it*, not studying data. Asserted positionally against those datasets, never with `textContent.includes`. **Negative control required:** a test that sets the table `display:none` or `aria-hidden="true"` and expects the assertion to go red.
+- [x] **A render is announceable.** Two permanent live regions, outside anything ever `hidden` or `:empty { display: none }`. Asserted as the invariant rather than the speech: at no observed moment does an active status/notes element satisfy `textContent !== ""` && (hidden || display === "none")` — checkable in jsdom, and **it goes red against today's code**. The word "announces" is earned by one NVDA and one VoiceOver pass recorded in LAUNCH.md, never by a green suite.
+- [x] **Dropzone is accessible.** The dropzone is interactive as a button (`<button type="button" id="drop" class="dropzone">`), properly exposed to the accessibility tree with an accessible name, natively focusable via keyboard, and triggering file selection on Enter or Space without requiring extra JS keydown shims.
+- [x] **Must keep working:** All 245 existing tests pass (+12 a11y tests, 257 total); no regression on exports or presets.
 
 **Prerequisite for the whole section:** the dropzone is a `<section>` with an accessible name
 (`index.html:34-39`), i.e. a *region landmark*, announced as scenery — and `<input id="file"

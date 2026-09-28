@@ -1,6 +1,7 @@
 import "./style.css";
 import { Chart } from "chart.js";
 import { buildConfig } from "./chart";
+import { autoTitle, populateSrTable } from "./a11y";
 import { CsvError, decodeUtf8, parseCsv, scrub } from "./csv";
 import { DetectError, detectChart, feasibleTypes } from "./detect";
 import { downloadBlob, exportPng, exportSvg, PRESETS, renderSvgString, shareFile } from "./export";
@@ -23,6 +24,9 @@ const pasteArea = $<HTMLTextAreaElement>("paste-area");
 const pasteRender = $<HTMLButtonElement>("paste-render");
 const statusEl = $<HTMLParagraphElement>("status");
 const resultEl = $<HTMLElement>("result");
+const chartTitleEl = $<HTMLHeadingElement>("chart-title");
+const srSummaryEl = $<HTMLParagraphElement>("sr-summary");
+const srTableEl = $<HTMLTableElement>("sr-table");
 const infoEl = $<HTMLParagraphElement>("info");
 const notesEl = $<HTMLParagraphElement>("notes");
 const previewCanvas = $<HTMLCanvasElement>("preview");
@@ -54,18 +58,10 @@ const currentPreset = (): ExportPreset =>
 function showStatus(message: string, kind: "error" | "info"): void {
   statusEl.textContent = message; // textContent = XSS-safe for user-derived text
   statusEl.className = `status ${kind}`;
-  statusEl.hidden = false;
 }
 function clearStatus(): void {
-  statusEl.hidden = true;
   statusEl.textContent = "";
-}
-
-function autoTitle(d: Detection): string {
-  const ys = d.yColumns.map((c) => c.name);
-  if (d.type === "scatter") return `${d.yColumns[1].name} vs ${d.yColumns[0].name}`;
-  if (d.type === "line") return `${ys.join(", ")} over ${d.xColumn.name}`;
-  return `${ys.join(", ")} by ${d.xColumn.name}`;
+  statusEl.className = "status";
 }
 
 /**
@@ -103,6 +99,8 @@ function renderPreview(): void {
     animation: false,
   };
   previewChart = new Chart(previewCanvas, config);
+  populateSrTable(srTableEl, srSummaryEl, config, state.detection, state.parsed, state.title);
+  chartTitleEl.textContent = state.title;
 }
 
 /** Reflect which types are available and which is active on the toggle. */
@@ -189,6 +187,10 @@ function handleText(text: string, sourceTitle?: string, extraNotes: string[] = [
       showStatus(`Couldn't read that CSV: ${(err as Error).message}`, "error");
     }
     resultEl.hidden = true;
+    notesEl.textContent = "";
+    chartTitleEl.textContent = "";
+    srSummaryEl.textContent = "";
+    srTableEl.replaceChildren();
   }
 }
 
@@ -211,14 +213,8 @@ function handleFile(file: File): void {
   reader.readAsArrayBuffer(file);
 }
 
-// dropzone: click to browse
+// dropzone: click to browse (native button fires click on Enter and Space)
 dropEl.addEventListener("click", () => fileInput.click());
-dropEl.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" || e.key === " ") {
-    e.preventDefault();
-    fileInput.click();
-  }
-});
 fileInput.addEventListener("change", () => {
   const f = fileInput.files?.[0];
   if (f) handleFile(f);
