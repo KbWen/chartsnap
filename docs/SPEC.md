@@ -486,6 +486,19 @@ itself. It is one line: `<button type="button">`, after which the Enter/Space sh
 `main.ts:216-221` deletes itself. Note `role="button"` takes presentational children, so
 `.drop-sub`'s paste hint must fold into the accessible name.
 
+## v1.7 — edge robustness, CJK vector fidelity & polish (decided 2026-09-28)
+
+Addresses the gaps identified in the multi-angle audit: CJK fonts missing in SVG exports for Figma/vector tools, full-width digits crashing number detection, locale non-determinism in Chart.js, service worker navigate fallback TypeError, and prefers-reduced-motion.
+
+### Done criteria (v1.7) — completed 2026-09-28
+
+- [x] **CJK fonts in SVG export without canvas2svg crash.** The SVG export font stack includes ASCII names for CJK fonts (`PingFang TC`, `Microsoft JhengHei`, `Noto Sans CJK TC`) alongside system-ui stack so that Chinese text renders faithfully in Figma/Illustrator. canvas2svg must not crash (ASCII-only names, no non-ASCII names like `微軟正黑體` that break `canvas2svg`'s `__parseFont`). Asserted in test.
+- [x] **Full-width digits normalized (NFKC).** Full-width numbers (e.g. `１２３`, `４５.６`, `２０２５-０１-０５`) in cells or headers parse and detect as numbers/dates without dropping to category strings or failing with "No numeric column found". Asserted positionally on full-width input.
+- [x] **Chart.js locale determinism.** Chart.js configuration specifies `locale: "en-US"`, ensuring thousand-separators and numeric tick formatting are deterministic across different OS/browser locales.
+- [x] **Service worker navigate fallback resilience.** On offline cache miss, the service worker navigation fallback never passes a Promise resolving to `undefined` into `event.respondWith()`.
+- [x] **Respect `prefers-reduced-motion`.** The stylesheet includes a `@media (prefers-reduced-motion: reduce)` block that turns off animations and transitions when the user requests reduced motion.
+- [x] **Must keep working:** All 257 existing tests pass (+7 v1.7 tests, 264 total); no regression on exports or presets.
+
 ## Non-goals / Later / Not now
 
 - NO field/axis mapping or chart-type gallery UI (that is RAWGraphs' turf — we lose if we

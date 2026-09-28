@@ -320,7 +320,7 @@ export function parseCsv(text: string): ParsedCsv {
   const rows = result.data
     .filter((r) => r.length > 0 && !isBlankLine(r))
     .filter((r, i) => i === 0 || !isAllEmpty(r))
-    .map((r) => r.map((cell) => scrub(cell ?? "")));
+    .map((r) => r.map((cell) => scrub(cell ?? "").normalize("NFKC")));
 
   if (rows.length < 2) {
     throw new CsvError("Need a header row plus at least one data row.");

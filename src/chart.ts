@@ -37,10 +37,10 @@ Chart.register(
   Tooltip
 );
 
-// canvas2svg's font parser rejects quoted/numeric family names, so use a
-// quote-free, digit-free stack. It still renders nicely on canvas + PNG.
+// canvas2svg's font parser rejects quoted/numeric family names, so use an
+// ASCII-only, quote-free stack including CJK system fonts for Figma/Illustrator.
 Chart.defaults.font.family =
-  "system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif";
+  "system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, PingFang TC, Microsoft JhengHei, Noto Sans CJK TC, sans-serif";
 
 // Two colours I actually like (deep pine + ochre) carry the common 1–2 series case;
 // the rest are muted on purpose so they sit back instead of fighting for attention.
@@ -185,8 +185,8 @@ export function buildConfig(
 
   const plugins = {
     title: {
-      display: Boolean(opts.title.trim()),
-      text: opts.title,
+      display: Boolean(opts.title?.trim()),
+      text: opts.title ?? "",
       align: "start" as const,
       color: THEME.ink,
       font: { size: font.title, weight: 700 as const },
@@ -260,6 +260,7 @@ export function buildConfig(
         ],
       },
       options: {
+        locale: "en-US",
         responsive: true,
         maintainAspectRatio: false,
         animation: opts.animate === false ? false : undefined,
@@ -319,6 +320,7 @@ export function buildConfig(
       type: "line",
       data: { datasets },
       options: {
+        locale: "en-US",
         responsive: true,
         maintainAspectRatio: false,
         animation: opts.animate === false ? false : undefined,
@@ -379,6 +381,7 @@ export function buildConfig(
       type: "line",
       data: { labels, datasets: lineDatasets },
       options: {
+        locale: "en-US",
         responsive: true,
         maintainAspectRatio: false,
         animation: opts.animate === false ? false : undefined,
@@ -424,6 +427,7 @@ export function buildConfig(
     type: "bar",
     data: { labels, datasets },
     options: {
+      locale: "en-US",
       responsive: true,
       maintainAspectRatio: false,
       animation: opts.animate === false ? false : undefined,

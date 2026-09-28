@@ -39,10 +39,24 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
 
   // Navigations go to the network first, so a fresh deploy shows up on the next load;
-  // offline they fall back to the cached page.
+  // offline they fall back to the cached page. If both miss, return a fallback Response
+  // so respondWith never resolves to undefined (which throws a browser TypeError).
   if (req.mode === "navigate") {
     event.respondWith(
-      fetch(req).catch(() => caches.match("./").then((hit) => hit || caches.match("./index.html")))
+      fetch(req).catch(() =>
+        caches
+          .match("./")
+          .then((hit) => hit || caches.match("./index.html"))
+          .then(
+            (hit) =>
+              hit ||
+              new Response("Offline — chartsnap is not cached yet.", {
+                status: 503,
+                statusText: "Service Unavailable",
+                headers: { "Content-Type": "text/plain; charset=utf-8" },
+              })
+          )
+      )
     );
     return;
   }
