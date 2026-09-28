@@ -371,7 +371,22 @@ nobody can see.
       moment either moves without the other — which is the point, because the next person to
       touch either number will be reading the code, not this SPEC.
       **Must keep working:** nothing changes at runtime today; the two numbers are already equal.
-      This is a tripwire for the fork, not a fix for a live defect.
+## v1.5.2 — CVD safety & supply-chain pinning (decided 2026-09-28)
+
+Resolves the live defect identified in the v1.6 audit where series 3 and 5 are identical to a protanope, picks Door 2 for grayscale, and pins the floating PapaParse dependency.
+
+### Done criteria (v1.5.2)
+
+- [x] **No two series are the same colour to a colourblind reader.** Series 3 `#6b7f92` and series 5 `#8a8199` measure **ΔE00 2.24 under protanopia** (Machado 2009, severity 1.0, in linear RGB) — at the JND, i.e. the same colour, for ~8% of men, on screen, in colour. Replace the palette with verified hexes keeping the brand lead `#155e4c` and ochre `#ca8233`, where all 6 series achieve min pairwise CVD ΔE00 ≥ 15 (measured ≥ 17.7 on protanopia and ≥ 18.0 on deuteranopia, and ≥ 27.1 in standard vision).
+- [x] **All series colours clear WCAG 1.4.11 with neighbourhood rounding safety.** Every entry in `PALETTE` clears 3:1 against `EXPORT_BG` (`#fffdf8`) across its whole ±1 8-bit rounding neighbourhood.
+- [x] **Grayscale honest limitation documented (Door 2).** As decided in DECISIONS.md (Door 2), acknowledge that on social screen presets (Twitter card, IG) monochrome gray is not an effective channel without breaking the muted editorial design language. Document this honestly in `README.md` under "What it isn't / Known limitations".
+- [x] **Supply-chain pinning.** Pin `papaparse` from `^5.4.1` to exact installed version `5.5.4` in `package.json`, matching `chart.js` and `canvas2svg` exact pinning.
+- [x] **Tripwire property assertion.** `test/palette.test.ts` asserts:
+      (1) Every colour in `PALETTE` has contrast ≥ 3:1 against `EXPORT_BG` and survives ±1 neighbourhood quantization.
+      (2) `PALETTE[0] === "#155e4c"` (signature unchanged).
+      (3) `PALETTE.length === MAX_SERIES` (cap tripwire).
+      (4) Machado 2009 CVD simulation: for both protanopia and deuteranopia at severity 1.0, minimum pairwise CIEDE2000 ΔE00 ≥ 15.0 across all 15 pairs. Proven to fail (red) against the old palette before passing (green).
+- [x] **Must keep working:** All 245 tests pass (+7 tests); PNG and SVG exports remain byte-deterministic; no regression on existing presets.
 
 ## v1.6 — the output excludes people (drafted 2026-07-16, NOT READY TO BUILD)
 

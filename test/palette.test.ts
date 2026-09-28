@@ -44,12 +44,9 @@ describe("every series colour is a legal graphical object", () => {
     expect(contrast(hex, EXPORT_BG)).toBeGreaterThanOrEqual(3);
   });
 
-  it("the ochre clears it with room for a rounding step, not by 0.7%", () => {
-    // #cb8335 and #cc8333 are both nominally legal and both fail here: a single 8-bit step
-    // drops them under 3:1. A margin thinner than the quantisation grid is not a margin.
-    const ochre = PALETTE[1];
-    const worst = Math.min(...neighbourhood(ochre).map((h) => contrast(h, EXPORT_BG)));
-    expect(worst, `${ochre} at its worst ±1 neighbour`).toBeGreaterThanOrEqual(3);
+  it.each(PALETTE)("%s clears 3:1 across its ±1 rounding neighbourhood", (hex) => {
+    const worst = Math.min(...neighbourhood(hex).map((h) => contrast(h, EXPORT_BG)));
+    expect(worst, `${hex} at its worst ±1 neighbour`).toBeGreaterThanOrEqual(3);
   });
 
   it("the signature has not moved", () => {
@@ -69,3 +66,160 @@ describe("the cap and the palette cannot drift apart", () => {
     expect(MAX_SERIES).toBe(PALETTE.length);
   });
 });
+
+/**
+ * Machado 2009 CVD simulation (severity 1.0 in linear sRGB) and CIEDE2000 color difference.
+ * Reference: Machado et al., IEEE TVCG 2009.
+ */
+const PROTANOPIA_1_0 = [
+  [0.152286, 1.052583, -0.204868],
+  [0.114503, 0.786281, 0.099216],
+  [-0.003882, -0.048116, 1.051998],
+];
+
+const DEUTERANOPIA_1_0 = [
+  [0.367322, 0.860646, -0.227968],
+  [0.280085, 0.672501, 0.047413],
+  [-0.011820, 0.042940, 0.968881],
+];
+
+const srgbToLinear = (c: number): number => {
+  const v = c / 255;
+  return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+};
+
+const linearToSrgb = (v: number): number => {
+  const c = v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055;
+  return Math.max(0, Math.min(255, Math.round(c * 255)));
+};
+
+const hexToRgb = (hex: string): [number, number, number] => {
+  return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
+};
+
+const simulateCVD = (rgb: [number, number, number], matrix: number[][]): [number, number, number] => {
+  const lin = rgb.map(srgbToLinear);
+  const outLin = [
+    matrix[0][0] * lin[0] + matrix[0][1] * lin[1] + matrix[0][2] * lin[2],
+    matrix[1][0] * lin[0] + matrix[1][1] * lin[1] + matrix[1][2] * lin[2],
+    matrix[2][0] * lin[0] + matrix[2][1] * lin[1] + matrix[2][2] * lin[2],
+  ];
+  return outLin.map(linearToSrgb) as [number, number, number];
+};
+
+const rgbToLab = (rgb: [number, number, number]): [number, number, number] => {
+  const [r, g, b] = rgb.map(srgbToLinear);
+  const X = (r * 0.4124564 + g * 0.3575761 + b * 0.1804375) / 0.95047;
+  const Y = (r * 0.2126729 + g * 0.7151522 + b * 0.072175) / 1.0;
+  const Z = (r * 0.0193339 + g * 0.119192 + b * 0.9503041) / 1.08883;
+
+  const f = (t: number) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+  const fx = f(X);
+  const fy = f(Y);
+  const fz = f(Z);
+
+  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+};
+
+const ciede2000 = (lab1: [number, number, number], lab2: [number, number, number]): number => {
+  const [L1, a1, b1] = lab1;
+  const [L2, a2, b2] = lab2;
+
+  const C1 = Math.hypot(a1, b1);
+  const C2 = Math.hypot(a2, b2);
+  const Cbar = (C1 + C2) / 2;
+
+  const G = 0.5 * (1 - Math.sqrt(Cbar ** 7 / (Cbar ** 7 + 25 ** 7)));
+  const a1p = (1 + G) * a1;
+  const a2p = (1 + G) * a2;
+
+  const C1p = Math.hypot(a1p, b1);
+  const C2p = Math.hypot(a2p, b2);
+
+  const h1p = (Math.atan2(b1, a1p) * (180 / Math.PI) + 360) % 360;
+  const h2p = (Math.atan2(b2, a2p) * (180 / Math.PI) + 360) % 360;
+
+  const dLp = L2 - L1;
+  const dCp = C2p - C1p;
+
+  let dhp = 0;
+  if (C1p * C2p !== 0) {
+    if (Math.abs(h2p - h1p) <= 180) dhp = h2p - h1p;
+    else if (h2p - h1p > 180) dhp = h2p - h1p - 360;
+    else dhp = h2p - h1p + 360;
+  }
+  const dHp = 2 * Math.sqrt(C1p * C2p) * Math.sin(((dhp / 2) * Math.PI) / 180);
+
+  const LbarP = (L1 + L2) / 2;
+  const CbarP = (C1p + C2p) / 2;
+
+  let hbarP = 0;
+  if (C1p * C2p !== 0) {
+    if (Math.abs(h1p - h2p) <= 180) hbarP = (h1p + h2p) / 2;
+    else if (h1p + h2p < 360) hbarP = (h1p + h2p + 360) / 2;
+    else hbarP = (h1p + h2p - 360) / 2;
+  }
+
+  const T =
+    1 -
+    0.17 * Math.cos(((hbarP - 30) * Math.PI) / 180) +
+    0.24 * Math.cos(((2 * hbarP) * Math.PI) / 180) +
+    0.32 * Math.cos(((3 * hbarP + 6) * Math.PI) / 180) -
+    0.2 * Math.cos(((4 * hbarP - 63) * Math.PI) / 180);
+
+  const dTheta = 30 * Math.exp(-(((hbarP - 275) / 25) ** 2));
+  const RC = 2 * Math.sqrt(CbarP ** 7 / (CbarP ** 7 + 25 ** 7));
+  const RT = -RC * Math.sin(((2 * dTheta) * Math.PI) / 180);
+
+  const SL = 1 + (0.015 * (LbarP - 50) ** 2) / Math.sqrt(20 + (LbarP - 50) ** 2);
+  const SC = 1 + 0.045 * CbarP;
+  const SH = 1 + 0.015 * CbarP * T;
+
+  return Math.sqrt(
+    (dLp / SL) ** 2 +
+      (dCp / SC) ** 2 +
+      (dHp / SH) ** 2 +
+      RT * (dCp / SC) * (dHp / SH)
+  );
+};
+
+describe("every pair is distinguishable to a colourblind reader (CVD)", () => {
+  it("min pairwise ΔE00 under protanopia is at least 15", () => {
+    let minProt = 999;
+    let worstPair = "";
+    for (let i = 0; i < PALETTE.length; i++) {
+      for (let j = i + 1; j < PALETTE.length; j++) {
+        const rgb1 = hexToRgb(PALETTE[i]);
+        const rgb2 = hexToRgb(PALETTE[j]);
+        const p1 = simulateCVD(rgb1, PROTANOPIA_1_0);
+        const p2 = simulateCVD(rgb2, PROTANOPIA_1_0);
+        const dE = ciede2000(rgbToLab(p1), rgbToLab(p2));
+        if (dE < minProt) {
+          minProt = dE;
+          worstPair = `${PALETTE[i]} (series ${i + 1}) & ${PALETTE[j]} (series ${j + 1})`;
+        }
+      }
+    }
+    expect(minProt, `Protanopia worst pair: ${worstPair}`).toBeGreaterThanOrEqual(15);
+  });
+
+  it("min pairwise ΔE00 under deuteranopia is at least 15", () => {
+    let minDeut = 999;
+    let worstPair = "";
+    for (let i = 0; i < PALETTE.length; i++) {
+      for (let j = i + 1; j < PALETTE.length; j++) {
+        const rgb1 = hexToRgb(PALETTE[i]);
+        const rgb2 = hexToRgb(PALETTE[j]);
+        const d1 = simulateCVD(rgb1, DEUTERANOPIA_1_0);
+        const d2 = simulateCVD(rgb2, DEUTERANOPIA_1_0);
+        const dE = ciede2000(rgbToLab(d1), rgbToLab(d2));
+        if (dE < minDeut) {
+          minDeut = dE;
+          worstPair = `${PALETTE[i]} (series ${i + 1}) & ${PALETTE[j]} (series ${j + 1})`;
+        }
+      }
+    }
+    expect(minDeut, `Deuteranopia worst pair: ${worstPair}`).toBeGreaterThanOrEqual(15);
+  });
+});
+

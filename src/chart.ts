@@ -56,8 +56,12 @@ Chart.defaults.font.family =
 // in another file, with nothing binding them — and the lookups below wrap with
 // `i % PALETTE.length`. Today that coincidence is the only thing stopping two series being drawn
 // in the same colour. Raise the cap without extending this array and you ship exactly the silent
-// wrong chart this repo exists to prevent. See SPEC v1.6 for what else this palette owes.
-export const PALETTE = ["#155e4c", "#ca8233", "#6b7f92", "#a86a5f", "#8a8199", "#6f8a76"];
+// wrong chart this repo exists to prevent.
+//
+// In v1.5.2, series 3–6 were updated to resolve a live protanopia collision between old series 3
+// and 5 (ΔE00 2.24 -> now min pairwise CVD ΔE00 >= 17.7 for both protanopia & deuteranopia,
+// with all 6 colours clearing WCAG 1.4.11 >= 3:1 against EXPORT_BG across their rounding neighbourhood).
+export const PALETTE = ["#155e4c", "#ca8233", "#2f4161", "#5885e7", "#7b0900", "#b76385"];
 
 /** Warm near-white background shared by the raster (PNG) and vector (SVG) exports. */
 export const EXPORT_BG = "#fffdf8";

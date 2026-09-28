@@ -89,6 +89,7 @@ doesn't fit on the chart, it says which.
 - A lone `3.850` is genuinely ambiguous — 3.85, or 3850 with a European thousands dot?
   It's read as 3.85 and the chart tells you so. Nothing in the column can settle it.
 - It charts rows as they are — it doesn't sum or group them.
+- Multi-series charts are tuned for color and color vision deficiency (CVD: protanopia/deuteranopia safe), not black-and-white print: distinguishing six series in pure grayscale on social presets would require high-contrast monochrome patterns or harsh lightness steps that break the muted palette.
 
 ## Under the hood
 
