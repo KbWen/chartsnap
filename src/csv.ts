@@ -294,7 +294,12 @@ const isAllEmpty = (row: string[]): boolean => row.every((c) => !(c ?? "").trim(
 export function parseCsv(text: string): ParsedCsv {
   const notes: string[] = [];
 
-  const result = Papa.parse<string[]>(text, {
+  // Strip trailing newlines so PapaParse's delimiter detection isn't tricked by a
+  // trailing empty row into seeing an average field count < 1.99 (which fails TSV guessing
+  // for 2-column Excel clipboard copies). Blank lines are filtered downstream.
+  const input = text.replace(/[\r\n]+$/, "");
+
+  const result = Papa.parse<string[]>(input, {
     header: false,
     // NOT "greedy": that eats a header row of blank names (",,"), quietly promoting the
     // first data row to the header. We drop blank lines ourselves, just below.

@@ -499,6 +499,18 @@ Addresses the gaps identified in the multi-angle audit: CJK fonts missing in SVG
 - [x] **Respect `prefers-reduced-motion`.** The stylesheet includes a `@media (prefers-reduced-motion: reduce)` block that turns off animations and transitions when the user requests reduced motion.
 - [x] **Must keep working:** All 257 existing tests pass (+7 v1.7 tests, 264 total); no regression on exports or presets.
 
+## v1.8 — interaction polish, WCAG AA contrast & focus integrity (decided 2026-10-07)
+
+Resolves live friction points audited by roundtable & tenth-man: spreadsheet clipboard paste support (TSV/semicolon with delimiter-guess trailing newline guard), --faint & --muted contrast upgrade preserving 3-tier visual hierarchy to WCAG 2.1 AA (>= 4.5:1), explicit high-contrast :focus-visible styles, and mobile theme-color meta tag.
+
+### Done criteria (v1.8) — completed 2026-10-07
+
+- [x] **Spreadsheet clipboard paste works anywhere on the page without false triggers.** Global paste handler detects multi-line tabular text with newlines (`\n`/`\r`) and delimiters (`\t`, `,`, `;`), charting instantly. `parseCsv` handles trailing newlines gracefully so PapaParse delimiter guessing for 2-column TSV never falls below the 1.99 threshold. Single-line text pastes with stray delimiters stay inert and do not destroy the current chart.
+- [x] **`--faint` and `--muted` clear WCAG 2.1 AA while preserving 3-tier hierarchy.** `--faint` adjusts to `#746e61` (4.61:1 on paper, L* 46.6) and `--muted` adjusts to `#5e584b` (6.42:1 on paper, L* 37.6), holding a Delta L* of ~9.0 between secondary and tertiary text while both clear the 4.5:1 AA floor. `chart.ts`'s `THEME.muted` stays untouched so export byte-determinism is preserved.
+- [x] **High-contrast keyboard focus indicators (`:focus-visible`).** `.btn` defines explicit outline (`outline: 2px solid var(--accent); outline-offset: 1px;`), and `.dropzone:focus-visible` defines `outline: 2px solid var(--accent); outline-offset: 2px;` (no more `outline: none`), achieving >= 7.5:1 focus contrast against paper.
+- [x] **Mobile theme-color meta tag.** `index.html` includes `<meta name="theme-color" content="#f6f4ee" />` matching the paper background for seamless mobile chrome appearance.
+- [x] **Must keep working:** All 264 existing tests pass (+10 v1.8 tests, 274 total); PNG and SVG exports remain byte-deterministic; zero CSP violations.
+
 ## Non-goals / Later / Not now
 
 - NO field/axis mapping or chart-type gallery UI (that is RAWGraphs' turf — we lose if we

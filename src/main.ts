@@ -249,9 +249,11 @@ pasteRender.addEventListener("click", () => {
 document.addEventListener("paste", (e) => {
   if (document.activeElement === pasteArea) return;
   const text = e.clipboardData?.getData("text");
-  if (text && text.includes(",")) {
+  const hasLinebreak = Boolean(text && (text.includes("\n") || text.includes("\r")));
+  const hasDelimiter = Boolean(text && (text.includes(",") || text.includes("\t") || text.includes(";")));
+  if (hasLinebreak && hasDelimiter) {
     e.preventDefault();
-    handleText(text);
+    handleText(text!);
   }
 });
 

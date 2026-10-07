@@ -60,6 +60,7 @@ Then pick a size and download. PNG and SVG both, free, no watermark.
 ## What it handles
 
 Quoted commas, US and European numbers (`1,234.56` and `1.234,56`, decided per column),
+spreadsheet copies (Excel and Google Sheets TSV pasted straight onto the page),
 blank cells (drawn as gaps), big files (sampled down with a note), and files that aren't
 UTF-8 — a Big5 or Latin-1 export still charts, with a note telling you why the labels came
 out as `���` and to re-save as UTF-8. It won't refuse your file: it can't reliably tell a
