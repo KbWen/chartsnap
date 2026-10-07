@@ -17,7 +17,10 @@ import {
   Tooltip,
 } from "chart.js";
 import "./date-adapter";
-import type { Detection, ParsedCsv } from "./types";
+import { DEFAULT_THEME_ID, getTheme, listThemes, registerTheme, THEMES } from "./themes";
+import type { ChartTheme, Detection, ParsedCsv } from "./types";
+
+export { DEFAULT_THEME_ID, getTheme, listThemes, registerTheme, THEMES };
 
 // Register only what the three chart types need. `...registerables` would also pull in
 // pie/doughnut/radar/polarArea/bubble, the radial + logarithmic scales, Filler and
@@ -42,48 +45,17 @@ Chart.register(
 Chart.defaults.font.family =
   "system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, PingFang TC, Microsoft JhengHei, Noto Sans CJK TC, sans-serif";
 
-// Two colours I actually like (deep pine + ochre) carry the common 1–2 series case;
-// the rest are muted on purpose so they sit back instead of fighting for attention.
-//
-// The ochre was #cf8636 until 2026-07-16, which measured 2.903:1 against EXPORT_BG — under
-// WCAG 1.4.11's 3:1 for graphical objects, i.e. the one colour in the output that provably
-// excluded people. #ca8233 is 3.059:1 and ΔE00 1.37 away: hue moves 0.1°, chroma 0.5, and only
-// lightness shifts, by 1.6 L*. Nobody can see it, and nobody has the original to compare to.
-// Not #cb8335 or #cc8333, which are nominally legal and drop below 3:1 under a single 8-bit
-// rounding step — margins thinner than the grid they ship on.
-//
-// NOTE for anyone forking: this line is 6 long and detect.ts's MAX_SERIES is 6 *by coincidence*,
-// in another file, with nothing binding them — and the lookups below wrap with
-// `i % PALETTE.length`. Today that coincidence is the only thing stopping two series being drawn
-// in the same colour. Raise the cap without extending this array and you ship exactly the silent
-// wrong chart this repo exists to prevent.
-//
-// In v1.5.2, series 3–6 were updated to resolve a live protanopia collision between old series 3
-// and 5 (ΔE00 2.24 -> now min pairwise CVD ΔE00 >= 17.7 for both protanopia & deuteranopia,
-// with all 6 colours clearing WCAG 1.4.11 >= 3:1 against EXPORT_BG across their rounding neighbourhood).
-export const PALETTE = ["#155e4c", "#ca8233", "#2f4161", "#5885e7", "#7b0900", "#b76385"];
+/** Default editorial palette for backwards-compatibility. */
+export const PALETTE = THEMES[DEFAULT_THEME_ID].palette;
 
-/** Warm near-white background shared by the raster (PNG) and vector (SVG) exports. */
-export const EXPORT_BG = "#fffdf8";
+/** Default warm near-white background shared by raster and vector exports. */
+export const EXPORT_BG = THEMES[DEFAULT_THEME_ID].bg;
 
-const THEME = {
-  ink: "#1c1a15", // titles
-  muted: "#6f6a5f", // ticks, axis labels, legend
-  grid: "#ece6d9", // hairline gridlines
-  bg: EXPORT_BG, // warm near-white export background
-};
-
-/** Paints an opaque, warm background so exported PNG/SVG aren't transparent. */
-const background: Plugin = {
-  id: "solidBackground",
-  beforeDraw(chart) {
-    const { ctx, width, height } = chart;
-    ctx.save();
-    ctx.globalCompositeOperation = "destination-over";
-    ctx.fillStyle = THEME.bg;
-    ctx.fillRect(0, 0, width, height);
-    ctx.restore();
-  },
+export const THEME = {
+  ink: THEMES[DEFAULT_THEME_ID].ink,
+  muted: THEMES[DEFAULT_THEME_ID].muted,
+  grid: THEMES[DEFAULT_THEME_ID].grid,
+  bg: EXPORT_BG,
 };
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -126,7 +98,7 @@ function tickUnit(times: number[]): "day" | "month" | "quarter" | "year" | undef
 }
 
 export interface BuildOpts {
-  title: string;
+  title?: string;
   /** Target pixel size; used to scale fonts so large exports stay legible. */
   width: number;
   height: number;
@@ -138,6 +110,8 @@ export interface BuildOpts {
    */
   basis?: number;
   animate?: boolean;
+  /** Visual style theme. Defaults to 'editorial'. */
+  theme?: ChartTheme;
 }
 
 function num(n: number): number | null {
@@ -153,6 +127,9 @@ export function buildConfig(
   detection: Detection,
   opts: BuildOpts
 ): ChartConfiguration {
+  const theme = opts.theme ?? getTheme();
+  const palette = theme.palette;
+
   // Geometry — padding, point radius, rule widths, bar caps — keeps the short-edge scale it
   // was tuned against, and looks right.
   const scale = clamp(Math.min(opts.width, opts.height) / 700, 1, 4);
@@ -188,7 +165,7 @@ export function buildConfig(
       display: Boolean(opts.title?.trim()),
       text: opts.title ?? "",
       align: "start" as const,
-      color: THEME.ink,
+      color: theme.ink,
       font: { size: font.title, weight: 700 as const },
       padding: { top: px(4), bottom: multiSeries ? px(6) : px(16) },
     },
@@ -199,7 +176,7 @@ export function buildConfig(
       labels: {
         usePointStyle: true,
         pointStyle: "circle" as const,
-        color: THEME.muted,
+        color: theme.muted,
         boxWidth: px(7),
         boxHeight: px(7),
         padding: px(14),
@@ -208,7 +185,7 @@ export function buildConfig(
     },
     tooltip: {
       enabled: opts.animate !== false,
-      backgroundColor: THEME.ink,
+      backgroundColor: theme.ink,
       padding: 10,
       cornerRadius: 6,
       boxPadding: 4,
@@ -220,7 +197,7 @@ export function buildConfig(
   const layout = { padding: { top: px(18), right: px(24), bottom: px(12), left: px(10) } };
 
   const ticks = (extra: object = {}) => ({
-    color: THEME.muted,
+    color: theme.muted,
     font: { size: font.ticks },
     padding: px(6),
     ...extra,
@@ -228,12 +205,25 @@ export function buildConfig(
   const axisTitle = (text: string, display = true) => ({
     display,
     text,
-    color: THEME.muted,
+    color: theme.muted,
     font: { size: font.axis, weight: 500 as const },
     padding: { top: px(4), bottom: px(2) },
   });
-  const yGrid = { color: THEME.grid, drawTicks: false, lineWidth: 1 };
+  const yGrid = { color: theme.grid, drawTicks: false, lineWidth: 1 };
   const noBorder = { display: false };
+
+  /** Paints an opaque theme background so exported PNG isn't transparent. */
+  const background: Plugin = {
+    id: "solidBackground",
+    beforeDraw(chart) {
+      const { ctx, width, height } = chart;
+      ctx.save();
+      ctx.globalCompositeOperation = "destination-over";
+      ctx.fillStyle = theme.bg;
+      ctx.fillRect(0, 0, width, height);
+      ctx.restore();
+    },
+  };
 
   // ---- scatter -----------------------------------------------------------
   if (detection.type === "scatter") {
@@ -251,10 +241,10 @@ export function buildConfig(
           {
             label: `${yc.name} vs ${xc.name}`,
             data: points,
-            backgroundColor: PALETTE[0],
+            backgroundColor: palette[0],
             pointRadius: px(4),
             pointHoverRadius: px(6),
-            borderColor: THEME.bg,
+            borderColor: theme.bg,
             borderWidth: px(1),
           },
         ],
@@ -298,7 +288,7 @@ export function buildConfig(
         data.push({ x: t, y: num(yc.nums[r]) });
       }
       data.sort((a, b) => a.x - b.x);
-      const color = PALETTE[i % PALETTE.length];
+      const color = palette[i % palette.length];
       return {
         label: yc.name,
         data: data as never,
@@ -361,7 +351,7 @@ export function buildConfig(
   if (detection.type === "line") {
     const labels = detection.xColumn.raw;
     const lineDatasets: ChartDataset<"line">[] = detection.yColumns.map((yc, i) => {
-      const color = PALETTE[i % PALETTE.length];
+      const color = palette[i % palette.length];
       return {
         label: yc.name,
         data: labels.map((_, r) => num(yc.nums[r])) as never,
@@ -408,7 +398,7 @@ export function buildConfig(
   // ---- bar / categorical -------------------------------------------------
   const labels = detection.xColumn.raw;
   const datasets: ChartDataset<"bar">[] = detection.yColumns.map((yc, i) => {
-    const color = PALETTE[i % PALETTE.length];
+    const color = palette[i % palette.length];
     return {
       label: yc.name,
       data: labels.map((_, r) => num(yc.nums[r])) as never,

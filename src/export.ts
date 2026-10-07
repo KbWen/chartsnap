@@ -1,7 +1,8 @@
 import C2S from "canvas2svg";
 import { BasicPlatform, Chart, type ChartConfiguration } from "chart.js";
-import { buildConfig, EXPORT_BG } from "./chart";
-import type { Detection, ExportPreset, ParsedCsv } from "./types";
+import { buildConfig } from "./chart";
+import { getTheme } from "./themes";
+import type { ChartTheme, Detection, ExportPreset, ParsedCsv } from "./types";
 
 export const PRESETS: ExportPreset[] = [
   { id: "twitter", label: "Twitter card · 1200×675", width: 1200, height: 675 },
@@ -17,13 +18,15 @@ function exportConfig(
   parsed: ParsedCsv,
   detection: Detection,
   title: string,
-  preset: ExportPreset
+  preset: ExportPreset,
+  theme?: ChartTheme
 ): ChartConfiguration {
   const config = buildConfig(parsed, detection, {
     title,
     width: preset.width,
     height: preset.height,
     animate: false,
+    theme,
   });
   config.options = {
     ...config.options,
@@ -41,12 +44,13 @@ function renderToCanvas(
   parsed: ParsedCsv,
   detection: Detection,
   title: string,
-  preset: ExportPreset
+  preset: ExportPreset,
+  theme?: ChartTheme
 ): { canvas: HTMLCanvasElement; chart: Chart } {
   const canvas = document.createElement("canvas");
   canvas.width = preset.width;
   canvas.height = preset.height;
-  const chart = new Chart(canvas, exportConfig(parsed, detection, title, preset));
+  const chart = new Chart(canvas, exportConfig(parsed, detection, title, preset, theme));
   return { canvas, chart };
 }
 
@@ -55,9 +59,10 @@ export async function exportPng(
   parsed: ParsedCsv,
   detection: Detection,
   title: string,
-  preset: ExportPreset
+  preset: ExportPreset,
+  theme?: ChartTheme
 ): Promise<Blob> {
-  const { canvas, chart } = renderToCanvas(parsed, detection, title, preset);
+  const { canvas, chart } = renderToCanvas(parsed, detection, title, preset, theme);
   try {
     const blob = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob(resolve, "image/png")
@@ -125,8 +130,10 @@ export function renderSvgString(
   parsed: ParsedCsv,
   detection: Detection,
   title: string,
-  preset: ExportPreset
+  preset: ExportPreset,
+  theme?: ChartTheme
 ): string {
+  const activeTheme = theme ?? getTheme();
   const ctx = new C2S(preset.width, preset.height);
   patchSvgCtx(ctx as unknown as Record<string, unknown>);
   // Chart.js reads item.getContext('2d') and ctx.canvas; wire up a fake canvas.
@@ -138,7 +145,7 @@ export function renderSvgString(
   };
   (ctx as { canvas?: unknown }).canvas = fakeCanvas;
 
-  const config = exportConfig(parsed, detection, title, preset);
+  const config = exportConfig(parsed, detection, title, preset, activeTheme);
   // canvas2svg can't honour destination-over compositing, so drop the raster
   // background plugin and paint the background straight into the SVG below.
   config.plugins = [];
@@ -157,11 +164,19 @@ export function renderSvgString(
     const raw = (ctx as unknown as { getSerializedSvg(fix?: boolean): string }).getSerializedSvg(
       true
     );
+    // Inject responsive viewBox if not already present on <svg>
+    let svgWithViewBox = raw;
+    if (!/<svg[^>]*\bviewBox=/i.test(svgWithViewBox)) {
+      svgWithViewBox = svgWithViewBox.replace(
+        /<svg(\s|>)/i,
+        `<svg viewBox="0 0 ${preset.width} ${preset.height}"$1`
+      );
+    }
     // Inject an opaque background as the first child (document order = behind),
-    // matching the raster export's warm background.
-    const withBg = raw.replace(
+    // matching the raster export's theme background.
+    const withBg = svgWithViewBox.replace(
       /(<svg[^>]*>)/,
-      `$1<rect x="0" y="0" width="${preset.width}" height="${preset.height}" fill="${EXPORT_BG}"/>`
+      `$1<rect x="0" y="0" width="${preset.width}" height="${preset.height}" fill="${activeTheme.bg}"/>`
     );
     return stableClipIds(withBg);
   } finally {
@@ -174,9 +189,10 @@ export function exportSvg(
   parsed: ParsedCsv,
   detection: Detection,
   title: string,
-  preset: ExportPreset
+  preset: ExportPreset,
+  theme?: ChartTheme
 ): Blob {
-  const svg = renderSvgString(parsed, detection, title, preset);
+  const svg = renderSvgString(parsed, detection, title, preset, theme);
   return new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
 }
 

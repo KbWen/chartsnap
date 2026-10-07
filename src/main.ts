@@ -1,11 +1,12 @@
 import "./style.css";
 import { Chart } from "chart.js";
 import { buildConfig } from "./chart";
+import { DEFAULT_THEME_ID, getTheme, listThemes } from "./themes";
 import { autoTitle, populateSrTable } from "./a11y";
 import { CsvError, decodeUtf8, parseCsv, scrub } from "./csv";
 import { DetectError, detectChart, feasibleTypes } from "./detect";
 import { downloadBlob, exportPng, exportSvg, PRESETS, renderSvgString, shareFile } from "./export";
-import type { ChartType, Detection, ExportPreset, ParsedCsv } from "./types";
+import type { ChartTheme, ChartType, Detection, ExportPreset, ParsedCsv } from "./types";
 // Bundled sample CSVs, inlined at build time (?raw) so "try a sample" needs no network.
 import sampleLine from "../samples/monthly-sales.csv?raw";
 import sampleBar from "../samples/fruit-votes.csv?raw";
@@ -34,6 +35,7 @@ const presetSelect = $<HTMLSelectElement>("preset");
 const dlPng = $<HTMLButtonElement>("dl-png");
 const dlSvg = $<HTMLButtonElement>("dl-svg");
 const typeButtons = [...document.querySelectorAll<HTMLButtonElement>(".type-btn")];
+const themeToggleEl = $<HTMLElement>("theme-toggle");
 
 // ---- app state ----------------------------------------------------------
 interface State {
@@ -43,6 +45,8 @@ interface State {
 }
 let state: State | null = null;
 let previewChart: Chart | null = null;
+let currentThemeId: string = DEFAULT_THEME_ID;
+const currentTheme = (): ChartTheme => getTheme(currentThemeId);
 
 // ---- preset select ------------------------------------------------------
 for (const p of PRESETS) {
@@ -89,6 +93,7 @@ function renderPreview(): void {
     width: w,
     height: h,
     basis: preset.width, // size type from the preset, so the preview matches the download
+    theme: currentTheme(),
   });
   config.options = {
     ...config.options,
@@ -163,6 +168,44 @@ for (const btn of typeButtons) {
     if (!btn.disabled) setChartType(btn.dataset.type as ChartType);
   });
 }
+
+function syncThemeButtons(): void {
+  const buttons = themeToggleEl.querySelectorAll<HTMLButtonElement>(".theme-btn");
+  for (const btn of buttons) {
+    const active = btn.dataset.theme === currentThemeId;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-pressed", String(active));
+  }
+}
+
+function initThemes(): void {
+  const existing = new Set(
+    [...themeToggleEl.querySelectorAll<HTMLButtonElement>(".theme-btn")].map((b) => b.dataset.theme)
+  );
+  for (const theme of listThemes()) {
+    if (!existing.has(theme.id)) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `theme-btn${theme.id === currentThemeId ? " active" : ""}`;
+      btn.dataset.theme = theme.id;
+      btn.textContent = theme.name.toLowerCase();
+      btn.setAttribute("aria-pressed", String(theme.id === currentThemeId));
+      themeToggleEl.appendChild(btn);
+    }
+  }
+}
+
+initThemes();
+themeToggleEl.addEventListener("click", (e) => {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".theme-btn");
+  if (!btn || !btn.dataset.theme) return;
+  const newTheme = btn.dataset.theme;
+  if (newTheme !== currentThemeId) {
+    currentThemeId = newTheme;
+    syncThemeButtons();
+    renderPreview();
+  }
+});
 
 // ---- input handling -----------------------------------------------------
 /**
@@ -297,7 +340,7 @@ dlPng.addEventListener(
   withBusy(dlPng, "Rendering…", async () => {
     if (!state) return;
     const preset = currentPreset();
-    const blob = await exportPng(state.parsed, state.detection, state.title, preset);
+    const blob = await exportPng(state.parsed, state.detection, state.title, preset, currentTheme());
     const name = `chartsnap-${preset.id}.png`;
     // On a phone the share sheet is the only route to the camera roll, and the camera roll is
     // the only route into Instagram. Only "unavailable" falls back to a download — dismissing
@@ -312,7 +355,7 @@ dlSvg.addEventListener(
   withBusy(dlSvg, "Rendering…", () => {
     if (!state) return;
     const preset = currentPreset();
-    const blob = exportSvg(state.parsed, state.detection, state.title, preset);
+    const blob = exportSvg(state.parsed, state.detection, state.title, preset, currentTheme());
     downloadBlob(blob, `chartsnap-${preset.id}.svg`);
   })
 );
@@ -333,15 +376,21 @@ if (import.meta.env.DEV) {
     load: (text: string, title?: string) => handleText(text, title),
     decode: (buf: ArrayBuffer) => decodeUtf8(buf),
     state: () => state,
+    setTheme: (id: string) => {
+      currentThemeId = id;
+      syncThemeButtons();
+      renderPreview();
+    },
+    getTheme: () => currentThemeId,
     svgFor: (id: string) => {
       if (!state) return null;
       const p = PRESETS.find((x) => x.id === id) ?? PRESETS[0];
-      return renderSvgString(state.parsed, state.detection, state.title, p);
+      return renderSvgString(state.parsed, state.detection, state.title, p, currentTheme());
     },
     pngLenFor: async (id: string) => {
       if (!state) return null;
       const p = PRESETS.find((x) => x.id === id) ?? PRESETS[0];
-      const blob = await exportPng(state.parsed, state.detection, state.title, p);
+      const blob = await exportPng(state.parsed, state.detection, state.title, p, currentTheme());
       return blob.size;
     },
   };

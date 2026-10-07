@@ -9,7 +9,7 @@ import { EXPORT_BG, PALETTE } from "../src/chart";
 import { MAX_SERIES } from "../src/detect";
 
 /** WCAG relative luminance — the only normative formula. */
-const luminance = (hex: string): number => {
+export const luminance = (hex: string): number => {
   const channel = (c: number): number => {
     const s = c / 255;
     return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
@@ -18,13 +18,13 @@ const luminance = (hex: string): number => {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 };
 
-const contrast = (a: string, b: string): number => {
+export const contrast = (a: string, b: string): number => {
   const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
   return (hi + 0.05) / (lo + 0.05);
 };
 
 /** Nudge every channel by ±1: the grid the colour is actually quantised onto. */
-const neighbourhood = (hex: string): string[] => {
+export const neighbourhood = (hex: string): string[] => {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
   const out: string[] = [];
   for (let dr = -1; dr <= 1; dr++)
@@ -71,33 +71,33 @@ describe("the cap and the palette cannot drift apart", () => {
  * Machado 2009 CVD simulation (severity 1.0 in linear sRGB) and CIEDE2000 color difference.
  * Reference: Machado et al., IEEE TVCG 2009.
  */
-const PROTANOPIA_1_0 = [
+export const PROTANOPIA_1_0 = [
   [0.152286, 1.052583, -0.204868],
   [0.114503, 0.786281, 0.099216],
   [-0.003882, -0.048116, 1.051998],
 ];
 
-const DEUTERANOPIA_1_0 = [
+export const DEUTERANOPIA_1_0 = [
   [0.367322, 0.860646, -0.227968],
   [0.280085, 0.672501, 0.047413],
   [-0.011820, 0.042940, 0.968881],
 ];
 
-const srgbToLinear = (c: number): number => {
+export const srgbToLinear = (c: number): number => {
   const v = c / 255;
   return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
 };
 
-const linearToSrgb = (v: number): number => {
+export const linearToSrgb = (v: number): number => {
   const c = v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055;
   return Math.max(0, Math.min(255, Math.round(c * 255)));
 };
 
-const hexToRgb = (hex: string): [number, number, number] => {
+export const hexToRgb = (hex: string): [number, number, number] => {
   return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
 };
 
-const simulateCVD = (rgb: [number, number, number], matrix: number[][]): [number, number, number] => {
+export const simulateCVD = (rgb: [number, number, number], matrix: number[][]): [number, number, number] => {
   const lin = rgb.map(srgbToLinear);
   const outLin = [
     matrix[0][0] * lin[0] + matrix[0][1] * lin[1] + matrix[0][2] * lin[2],
@@ -107,7 +107,7 @@ const simulateCVD = (rgb: [number, number, number], matrix: number[][]): [number
   return outLin.map(linearToSrgb) as [number, number, number];
 };
 
-const rgbToLab = (rgb: [number, number, number]): [number, number, number] => {
+export const rgbToLab = (rgb: [number, number, number]): [number, number, number] => {
   const [r, g, b] = rgb.map(srgbToLinear);
   const X = (r * 0.4124564 + g * 0.3575761 + b * 0.1804375) / 0.95047;
   const Y = (r * 0.2126729 + g * 0.7151522 + b * 0.072175) / 1.0;
@@ -121,7 +121,7 @@ const rgbToLab = (rgb: [number, number, number]): [number, number, number] => {
   return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
 };
 
-const ciede2000 = (lab1: [number, number, number], lab2: [number, number, number]): number => {
+export const ciede2000 = (lab1: [number, number, number], lab2: [number, number, number]): number => {
   const [L1, a1, b1] = lab1;
   const [L2, a2, b2] = lab2;
 

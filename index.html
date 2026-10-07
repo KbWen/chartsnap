@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f6f4ee" />
+    <meta name="color-scheme" content="light" />
     <!--
       The privacy claim, enforced by the browser instead of asserted by the copy.
       connect-src 'none' is the load-bearing one: it kills fetch, XHR, sendBeacon and
@@ -83,6 +84,12 @@
           <button type="button" class="type-btn" data-type="line">line</button>
           <button type="button" class="type-btn" data-type="bar">bar</button>
           <button type="button" class="type-btn" data-type="scatter">scatter</button>
+        </div>
+        <div class="theme-toggle" id="theme-toggle" role="group" aria-label="Visual style">
+          <span class="toggle-label">theme</span>
+          <button type="button" class="theme-btn active" data-theme="editorial" aria-pressed="true">editorial</button>
+          <button type="button" class="theme-btn" data-theme="corporate" aria-pressed="false">corporate</button>
+          <button type="button" class="theme-btn" data-theme="nordic" aria-pressed="false">nordic</button>
         </div>
 
         <div class="preview-wrap">

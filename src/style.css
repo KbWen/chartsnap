@@ -345,6 +345,48 @@ main {
   outline-offset: 1px;
 }
 
+/* ---- theme toggle ---- */
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 14px;
+}
+
+.theme-btn {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--muted);
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 4px 13px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.theme-btn:hover:not(:disabled):not(.active) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.theme-btn.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+
+.theme-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.theme-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* ---- preview: hairline frame, whisper of a shadow ---- */
 .preview-wrap {
   background: var(--card);
@@ -484,6 +526,7 @@ main {
      from padding — padding plus a font-dependent line box lands wherever it lands. */
   .chip,
   .type-btn,
+  .theme-btn,
   .btn,
   .select {
     min-height: 44px;
@@ -491,6 +534,7 @@ main {
 
   .chip,
   .type-btn,
+  .theme-btn,
   .btn {
     display: inline-flex;
     align-items: center;

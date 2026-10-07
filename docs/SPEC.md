@@ -511,6 +511,24 @@ Resolves live friction points audited by roundtable & tenth-man: spreadsheet cli
 - [x] **Mobile theme-color meta tag.** `index.html` includes `<meta name="theme-color" content="#f6f4ee" />` matching the paper background for seamless mobile chrome appearance.
 - [x] **Must keep working:** All 264 existing tests pass (+10 v1.8 tests, 274 total); PNG and SVG exports remain byte-deterministic; zero CSP violations.
 
+## v1.9 — de-AI business themes, responsive SVG viewBox & color-scheme protection (completed 2026-10-07)
+
+Introduces three strictly de-AI, context-anchored visual themes for distinct business settings (Editorial warm paper, Corporate Slate clean white, Nordic Minimal crisp zinc), adds SVG viewBox for responsive vector embedding, shields color rendering with color-scheme meta, and implements an extensible theme registry ("不要寫死").
+
+### Done criteria (v1.9)
+
+- [x] **Restrained de-AI theme selector.** A minimalist hairline pill group (`palette: [editorial] [corporate] [nordic]`) mirrors the chart-type toggle with zero flashy novelty controls, zero gradients, and zero AI marketing jargon. Default stays `editorial`. Dynamically syncs with `listThemes()` so adding new themes requires zero UI rework.
+- [x] **Curated, context-grounded business palettes.**
+      (1) `editorial` (default): warm paper `#fffdf8`, ink `#1c1a15`, pine `#155e4c` lead, Economist/FT publication feel.
+      (2) `corporate`: pure white `#ffffff`, slate ink `#0f172a`, classic navy `#0f4c81` lead, boardroom/investor pitch deck feel.
+      (3) `nordic`: crisp zinc `#fafaf9`, zinc ink `#18181b`, pitch charcoal `#18181b` lead, Linear/Notion modern engineering & analytics feel.
+- [x] **Mathematical CVD safety & WCAG contrast asserted for all themes.** Every theme's 6-color palette clears WCAG graphical contrast >= 3:1 against its background across +-1 8-bit rounding neighbourhood, and achieves minimum pairwise Machado 2009 CVD Delta E00 >= 15.0 under both protanopia and deuteranopia across all 15 pairs. Ink clears AAA (>= 7:1) and muted clears AA (>= 4.5:1).
+- [x] **Theme synchronizes across preview and exports.** Switching theme updates the live canvas preview, SVG export (including background rect, ink, and gridline colors), and PNG export without altering layout geometry or font ratios.
+- [x] **Exported SVG declares responsive `viewBox`.** SVG export injects `viewBox="0 0 width height"`, enabling responsive vector scaling without boundary clipping in web pages, Figma, and slide decks.
+- [x] **Browser auto-inversion shield (`color-scheme: light`).** `index.html` includes `<meta name="color-scheme" content="light" />` to prevent mobile browsers from corrupting paper/corporate palettes in forced dark mode.
+- [x] **Must keep working:** All 274 existing tests pass (+49 v1.9 tests, 323 total); default `editorial` exports remain byte-deterministic; zero CSP violations.
+
+
 ## Non-goals / Later / Not now
 
 - NO field/axis mapping or chart-type gallery UI (that is RAWGraphs' turf — we lose if we

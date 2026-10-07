@@ -47,3 +47,17 @@ export interface ExportPreset {
   width: number;
   height: number;
 }
+
+export type ThemeId = "editorial" | "corporate" | "nordic" | (string & {});
+
+export interface ChartTheme {
+  id: string;
+  name: string;
+  description?: string;
+  bg: string;
+  ink: string;
+  muted: string;
+  grid: string;
+  palette: string[];
+}
+
