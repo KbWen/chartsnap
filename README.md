@@ -47,10 +47,15 @@ It looks at what's in each column:
 | a single number column             | bar, by row  |
 
 Extra number columns become extra series, up to six — if any don't fit, the chart says
-which. Guessed wrong? There's a line / bar / scatter switch under the chart — the only
-setting, and that's on purpose.
+which. Guessed wrong? There's a line / bar / scatter switch under the chart.
 
-Then pick a size and download. PNG and SVG both, free, no watermark.
+Visual themes give your chart the right tone for where it's being shared, without AI gradients or neon clutter:
+
+- **Editorial** (default) — warm paper background with deep pine lead, inspired by Financial Times and The Economist.
+- **Corporate** — crisp pure white with classic navy lead, tailored for boardrooms and investor decks.
+- **Nordic** — cool stone background with pitch charcoal lead, matching modern engineering and analytics tools like Linear.
+
+Then pick a size and download. PNG and SVG both, free, no watermark. SVG exports declare responsive `viewBox` coordinates for lossless scaling in Figma, Keynote, and web layouts.
 
 - Twitter — 1200 × 675
 - Instagram post — 1080 × 1080

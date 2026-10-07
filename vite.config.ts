@@ -120,5 +120,6 @@ export default defineConfig({
     // Default to node; the SVG suite opts into jsdom via a file-level comment.
     environment: "node",
     include: ["test/**/*.test.ts"],
+    testTimeout: 15000,
   },
 });

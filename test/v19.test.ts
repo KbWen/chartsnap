@@ -152,6 +152,8 @@ describe("v1.9: Theme Synchronization Across Export Formats", () => {
 });
 
 describe("v1.9: Browser Auto-Inversion Shield & Restrained Theme Selector", () => {
+  const css = readFileSync(resolve(__dirname, "../src/style.css"), "utf-8");
+
   it("index.html specifies color-scheme light to shield against dark-mode inversion", () => {
     expect(indexHtml).toMatch(/<meta\s+name=["']color-scheme["']\s+content=["']light["']/i);
   });
@@ -161,6 +163,34 @@ describe("v1.9: Browser Auto-Inversion Shield & Restrained Theme Selector", () =
     expect(indexHtml).toContain('data-theme="editorial"');
     expect(indexHtml).toContain('data-theme="corporate"');
     expect(indexHtml).toContain('data-theme="nordic"');
+  });
+
+  it("theme toggle has accessible role group and aria-label", () => {
+    const doc = new DOMParser().parseFromString(indexHtml, "text/html");
+    const group = doc.getElementById("theme-toggle");
+    expect(group).not.toBeNull();
+    expect(group?.getAttribute("role")).toBe("group");
+    expect(group?.getAttribute("aria-label")).toBeTruthy();
+  });
+
+  it("all theme buttons are native button elements with type='button'", () => {
+    const doc = new DOMParser().parseFromString(indexHtml, "text/html");
+    const buttons = doc.querySelectorAll<HTMLButtonElement>("#theme-toggle .theme-btn");
+    expect(buttons.length).toBe(3);
+    for (const btn of buttons) {
+      expect(btn.tagName.toLowerCase()).toBe("button");
+      expect(btn.getAttribute("type")).toBe("button");
+      expect(btn.getAttribute("data-theme")).toBeTruthy();
+    }
+  });
+
+  it("style.css includes .theme-btn in the 44px mobile touch-target floor", () => {
+    // Assert 44px min-height rule covers .theme-btn inside media query
+    expect(css).toMatch(/@media\s*\(max-width:\s*640px\)[\s\S]*?\.theme-btn[\s\S]*?min-height:\s*44px/);
+  });
+
+  it("style.css defines explicit :focus-visible outline for .theme-btn", () => {
+    expect(css).toMatch(/\.theme-btn:focus-visible\s*\{[^}]*outline:/);
   });
 });
 

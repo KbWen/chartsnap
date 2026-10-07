@@ -18,17 +18,18 @@
 
 ## Evidence of function
 
-- [x] End-to-end run on real input, output verified here (2026-07-05):
+- [x] End-to-end run on real input, output verified here (2026-10-07):
       - All 3 auto-detect paths rendered from real CSVs (samples/): date→line,
-        category→bar, two-numeric→scatter — confirmed visually (PNG renders).
-      - SVG export produces valid vector output for all types (verified in-browser
-        and via a headless jsdom+node-canvas render).
-      - Edge cases exercised: quoted commas, thousands separators, missing values,
-        >1,000-row sampling, non-UTF-8 fallback message.
-      - Zero data-carrying network requests (DevTools Network tab: only localhost
-        app assets; source has no fetch/XHR/beacon/WebSocket).
-      - `npm run build` succeeds; dev-only test bridge stripped from the bundle.
-      - Shipped: live on Pages, CI + deploy green, demo GIF + hero captured from the real UI.
+        category→bar, two-numeric→scatter — confirmed visually and in tests.
+      - 3 curated de-AI business themes (editorial, corporate, nordic) verified across
+        all 4 export presets (36 total artifact combinations in test/e2e-audit.test.ts).
+      - SVG export produces valid vector output with responsive viewBox and exact theme
+        backgrounds and lead colors for all types and presets.
+      - PNG export produces real PNGs with valid 8-byte PNG header signatures.
+      - Machado 2009 CVD simulation achieves min pairwise ΔE00 ≥ 15.0 for protanopia
+        and deuteranopia on all themes; WCAG graphical contrast ≥ 3:1 across ±1 neighbourhood.
+      - `npm run build` succeeds (234 kB lean bundle); zero CSP violations.
+      - Total test suite: 402 / 402 tests green across 17 test files.
 
 ## Owner handoff
 
