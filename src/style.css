@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   /* Warm paper palette — deliberately off the cold-gray / default-blue look. */
   --paper: #f6f4ee;
   --card: #fffefb;

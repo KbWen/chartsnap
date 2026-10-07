@@ -40,9 +40,18 @@ export const THEMES: Record<string, ChartTheme> = {
 
 export const DEFAULT_THEME_ID = "editorial";
 
+const SAFE_COLOR_RE =
+  /^#([0-9a-fA-F]{3,8})$|^[a-zA-Z]+$|^rgba?\([0-9,.\s%]+\)$|^hsla?\([0-9,.\s%]+\)$/;
+
+function isValidColor(c: unknown): boolean {
+  return typeof c === "string" && SAFE_COLOR_RE.test(c.trim());
+}
+
 /** Look up a theme by id, falling back to the default theme if unspecified or unrecognized. */
 export function getTheme(id?: string): ChartTheme {
-  if (id && THEMES[id]) return THEMES[id];
+  if (id && Object.prototype.hasOwnProperty.call(THEMES, id)) {
+    return THEMES[id];
+  }
   return THEMES[DEFAULT_THEME_ID];
 }
 
@@ -53,8 +62,31 @@ export function listThemes(): ChartTheme[] {
 
 /**
  * Register or update a theme dynamically without modifying core chart logic.
- * Enables zero-friction theme expansion ("不要寫死").
+ * Enables zero-friction theme expansion ("不要寫死") with strict input sanitization.
  */
-export function registerTheme(theme: ChartTheme): void {
-  THEMES[theme.id] = theme;
+export function registerTheme(theme: ChartTheme): boolean {
+  if (!theme || typeof theme !== "object") return false;
+  if (typeof theme.id !== "string" || !theme.id.trim()) return false;
+  const id = theme.id.trim();
+  if (id === "__proto__" || id === "constructor" || id === "prototype") return false;
+
+  // Validate that colors are safe CSS/hex colors
+  if (
+    !isValidColor(theme.bg) ||
+    !isValidColor(theme.ink) ||
+    !isValidColor(theme.muted) ||
+    !isValidColor(theme.grid)
+  ) {
+    return false;
+  }
+  if (!Array.isArray(theme.palette) || theme.palette.length === 0 || !theme.palette.every(isValidColor)) {
+    return false;
+  }
+
+  THEMES[id] = {
+    ...theme,
+    id,
+    name: typeof theme.name === "string" && theme.name.trim() ? theme.name.trim() : id,
+  };
+  return true;
 }
