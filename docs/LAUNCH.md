@@ -29,12 +29,12 @@
       - Machado 2009 CVD simulation achieves min pairwise ΔE00 ≥ 15.0 for protanopia
         and deuteranopia on all themes; WCAG graphical contrast ≥ 3:1 across ±1 neighbourhood.
       - `npm run build` succeeds (234 kB lean bundle); zero CSP violations.
-      - Total test suite: 402 / 402 tests green across 17 test files.
+      - Total test suite: 431 / 431 tests green across 19 test files.
 
 ## Owner handoff
 
 - [ ] If you keep a product list / content hub: register this tool there (skip if not applicable)
-- [x] Demo assets exported (GIF, screenshots) — docs/hero.png + docs/demo.gif
+- [x] Demo assets exported (GIF, screenshots) — docs/hero.png + docs/demo.gif + docs/themes-preview.png
 - [x] One-line channel-fit note: Show HN + r/webdev / r/dataisbeautiful, and people searching
       "csv to chart no upload" / "csv chart offline" — the privacy angle is the hook
 

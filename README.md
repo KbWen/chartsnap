@@ -49,18 +49,28 @@ It looks at what's in each column:
 Extra number columns become extra series, up to six — if any don't fit, the chart says
 which. Guessed wrong? There's a line / bar / scatter switch under the chart.
 
-Visual themes give your chart the right tone for where it's being shared, without AI gradients or neon clutter:
+### Curated business themes
 
-- **Editorial** (default) — warm paper background with deep pine lead, inspired by Financial Times and The Economist.
-- **Corporate** — crisp pure white with classic navy lead, tailored for boardrooms and investor decks.
-- **Nordic** — cool stone background with pitch charcoal lead, matching modern engineering and analytics tools like Linear.
+Visual themes give your chart the right tone for where it's being shared — designed without synthetic gradients, glowing neons, or AI design clichés:
 
-Then pick a size and download. PNG and SVG both, free, no watermark. SVG exports declare responsive `viewBox` coordinates for lossless scaling in Figma, Keynote, and web layouts.
+![Curated business themes: Editorial, Corporate Slate, and Nordic Minimal](docs/themes-preview.png)
 
-- Twitter — 1200 × 675
-- Instagram post — 1080 × 1080
-- Instagram story — 1080 × 1920
-- A4 print — 3508 × 2480 (300 DPI)
+- **Editorial** (default) — warm paper background (`#fffdf8`) with deep pine lead (`#155e4c`) and warm ochre accents. Quiet authority and thoughtful editorial reporting, inspired by *The Financial Times* and *The Economist*.
+- **Corporate Slate** — crisp pure white (`#ffffff`) with classic navy lead (`#0f4c81`) and balanced slate tones. Confident, clean presentation tailored for boardrooms, investor memos, and executive decks.
+- **Nordic Minimal** — cool stone background (`#fafaf9`) with pitch charcoal lead (`#18181b`) and graphite rules. Restrained modern precision, tuned to match tools like Linear and contemporary technical analytics.
+
+Every theme palette is mathematically verified:
+- **WCAG 1.4.11 graphical contrast** $\ge 3:1$ against its canvas background across rounding boundaries.
+- **Color vision deficiency (CVD) safety**: Machado 2009 simulation guarantees pairwise $\Delta E00 \ge 15.0$ for protanopia and deuteranopia, and $\Delta E00 \ge 9.0$ for tritanopia (~4× JND).
+
+### Export presets
+
+Pick a size and download. PNG and SVG both, free, no watermark. SVG exports declare responsive `viewBox` coordinates for lossless scaling in Figma, Keynote, Illustrator, and responsive web layouts.
+
+- **Twitter card** — 1200 × 675
+- **Instagram post** — 1080 × 1080
+- **Instagram story** — 1080 × 1920
+- **A4 print** — 3508 × 2480 (300 DPI, landscape)
 
 ## What it handles
 
@@ -105,10 +115,11 @@ Accessible by design: the dropzone is a keyboard-interactive button, chart title
 Vite and vanilla TypeScript, [Chart.js](https://www.chartjs.org/) for drawing,
 [PapaParse](https://www.papaparse.com/) for the CSV, and
 [canvas2svg](https://github.com/gliffy/canvas2svg) for the vector export. No backend;
-it ships as static files to GitHub Pages.
+it ships as static files to GitHub Pages. Zero analytics, zero cookies, zero third-party scripts.
 
-`npm test` runs the column-detection cases, the time-axis date adapter, and an SVG smoke
-test — the tripwire that fails loudly if the vector export ever breaks on a Chart.js update.
+`npm test` runs 431 tests across 19 suites, covering column auto-detection, time-axis
+synchronization, responsive SVG serialization, CVD & WCAG contrast tripwires,
+negative controls, zero-trust prototype pollution defense, and multi-target PNG exports.
 
 ## License
 
