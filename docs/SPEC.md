@@ -528,6 +528,18 @@ Introduces three strictly de-AI, context-anchored visual themes for distinct bus
 - [x] **Browser auto-inversion shield (`color-scheme: light`).** `index.html` includes `<meta name="color-scheme" content="light" />` to prevent mobile browsers from corrupting paper/corporate palettes in forced dark mode.
 - [x] **Must keep working:** All 274 existing tests pass (+49 v1.9 tests, 323 total); default `editorial` exports remain byte-deterministic; zero CSP violations.
 
+## v1.9.1 — zero-trust hardening, prototype pollution & XSS defense (completed 2026-10-07)
+
+Hardened through untrusted and adversarial audit: eliminates prototype chain confusion and prototype pollution in the theme registry, sanitizes vector SVG injections, adds dual-layer color-scheme protection, and introduces negative control tripwires and Tritanopia CVD verification.
+
+### Done criteria (v1.9.1)
+
+- [x] **Prototype pollution & prototype chain confusion defense in theme registry.** `getTheme` guards theme ID lookup using `Object.prototype.hasOwnProperty.call(THEMES, id)` to prevent prototype chain confusion (`constructor`, `toString`). `registerTheme` explicitly rejects dangerous prototype pollution keys (`__proto__`, `constructor`, `prototype`) and enforces `SAFE_COLOR_RE` color validation on all background, ink, grid, and palette fields.
+- [x] **SVG XSS & injection sanitization.** `theme.bg` in `renderSvgString` strips quotes, angle brackets, and ampersands (`replace(/["<>&]/g, "")`) and preset coordinates are rounded to prevent malformed XML injections or vector breakout.
+- [x] **Dual-layer `color-scheme` defense-in-depth.** In addition to `<meta name="color-scheme" content="light">` in `index.html`, `:root` in `src/style.css` declares `color-scheme: light;` to shield against forced dark mode background inversion in mobile browsers and embedded webviews.
+- [x] **Adversarial test suite with negative controls & Machado 2009 Tritanopia verification.** 28 zero-trust tests in `test/zero-trust.test.ts` assert prototype pollution resilience, theme immutability, and negative controls proving CVD/WCAG tripwires turn red on invalid palettes, plus verification of Tritanopia min pairwise $\Delta E00 \ge 9.0$ (~4× JND) across all themes.
+- [x] **Must keep working:** All 402 existing tests pass (+28 zero-trust tests + 1 asset test, 431 total); existing exports stay byte-deterministic; zero regressions on mobile or presets.
+
 
 ## Non-goals / Later / Not now
 
