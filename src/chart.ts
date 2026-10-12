@@ -118,6 +118,13 @@ function num(n: number): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
+export function formatTitleWithUnit(name: string, unit?: string): string {
+  if (!unit || !name) return name;
+  const trimmed = name.trim();
+  if (trimmed.includes(unit)) return trimmed;
+  return `${trimmed} (${unit})`;
+}
+
 /**
  * The single source of truth for every render target (preview, PNG, SVG).
  * Builds a Chart.js config from the parsed CSV + detected chart type.
@@ -129,6 +136,16 @@ export function buildConfig(
 ): ChartConfiguration {
   const theme = opts.theme ?? getTheme();
   const palette = theme.palette;
+
+  const distinctUnits = Array.from(
+    new Set(detection.yColumns.map((c) => c.unit).filter((u): u is string => Boolean(u)))
+  );
+  if (distinctUnits.length > 1) {
+    const mixedNote = `Multi-series chart contains mixed units (${distinctUnits.join(", ")}) on the same axis — values may differ significantly in scale.`;
+    if (!parsed.notes.includes(mixedNote)) {
+      parsed.notes.push(mixedNote);
+    }
+  }
 
   // Geometry — padding, point radius, rule widths, bar caps — keeps the short-edge scale it
   // was tuned against, and looks right.
@@ -239,7 +256,7 @@ export function buildConfig(
       data: {
         datasets: [
           {
-            label: `${yc.name} vs ${xc.name}`,
+            label: `${formatTitleWithUnit(yc.name, yc.unit)} vs ${formatTitleWithUnit(xc.name, xc.unit)}`,
             data: points,
             backgroundColor: palette[0],
             pointRadius: px(4),
@@ -259,13 +276,13 @@ export function buildConfig(
         scales: {
           x: {
             type: "linear",
-            title: axisTitle(xc.name),
+            title: axisTitle(formatTitleWithUnit(xc.name, xc.unit)),
             grid: { ...yGrid },
             border: noBorder,
             ticks: ticks(),
           },
           y: {
-            title: axisTitle(yc.name),
+            title: axisTitle(formatTitleWithUnit(yc.name, yc.unit)),
             grid: yGrid,
             border: noBorder,
             ticks: ticks({ maxTicksLimit: 6 }),
@@ -290,7 +307,7 @@ export function buildConfig(
       data.sort((a, b) => a.x - b.x);
       const color = palette[i % palette.length];
       return {
-        label: yc.name,
+        label: formatTitleWithUnit(yc.name, yc.unit),
         data: data as never,
         borderColor: color,
         backgroundColor: color,
@@ -336,7 +353,10 @@ export function buildConfig(
             ticks: ticks({ maxRotation: 0, autoSkip: true, maxTicksLimit: 8, source: "data" }),
           },
           y: {
-            title: axisTitle(detection.yColumns[0]?.name ?? "", !multiSeries),
+            title: axisTitle(
+              formatTitleWithUnit(detection.yColumns[0]?.name ?? "", detection.yColumns[0]?.unit),
+              !multiSeries
+            ),
             grid: yGrid,
             border: noBorder,
             ticks: ticks({ maxTicksLimit: 6 }),
@@ -353,7 +373,7 @@ export function buildConfig(
     const lineDatasets: ChartDataset<"line">[] = detection.yColumns.map((yc, i) => {
       const color = palette[i % palette.length];
       return {
-        label: yc.name,
+        label: formatTitleWithUnit(yc.name, yc.unit),
         data: labels.map((_, r) => num(yc.nums[r])) as never,
         borderColor: color,
         backgroundColor: color,
@@ -384,7 +404,10 @@ export function buildConfig(
             ticks: ticks({ autoSkip: true, maxRotation: labels.length > 12 ? 55 : 0 }),
           },
           y: {
-            title: axisTitle(detection.yColumns[0]?.name ?? "", !multiSeries),
+            title: axisTitle(
+              formatTitleWithUnit(detection.yColumns[0]?.name ?? "", detection.yColumns[0]?.unit),
+              !multiSeries
+            ),
             grid: yGrid,
             border: noBorder,
             ticks: ticks({ maxTicksLimit: 6 }),
@@ -400,7 +423,7 @@ export function buildConfig(
   const datasets: ChartDataset<"bar">[] = detection.yColumns.map((yc, i) => {
     const color = palette[i % palette.length];
     return {
-      label: yc.name,
+      label: formatTitleWithUnit(yc.name, yc.unit),
       data: labels.map((_, r) => num(yc.nums[r])) as never,
       backgroundColor: color,
       borderColor: color,
@@ -431,7 +454,10 @@ export function buildConfig(
         },
         y: {
           beginAtZero: true,
-          title: axisTitle(detection.yColumns[0]?.name ?? "", !multiSeries),
+          title: axisTitle(
+            formatTitleWithUnit(detection.yColumns[0]?.name ?? "", detection.yColumns[0]?.unit),
+            !multiSeries
+          ),
           grid: yGrid,
           border: noBorder,
           ticks: ticks({ maxTicksLimit: 6 }),

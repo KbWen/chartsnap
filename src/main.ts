@@ -135,7 +135,7 @@ function showNotes(parsed: ParsedCsv, detection: Detection): void {
 function render(parsed: ParsedCsv, sourceTitle?: string): void {
   // A new dataset always starts from a fresh auto-detection (the toggle re-syncs below).
   const detection = detectChart(parsed); // may throw DetectError
-  const title = sourceTitle?.trim() || autoTitle(detection);
+  const title = sourceTitle?.trim() || parsed.extractedTitle || autoTitle(detection);
   state = { parsed, detection, title };
 
   infoEl.textContent = detection.reason;
@@ -144,6 +144,7 @@ function render(parsed: ParsedCsv, sourceTitle?: string): void {
   clearStatus();
   renderPreview();
   syncToggle(parsed, detection.type);
+  resultEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 /** Escape hatch: re-render the current data as an explicitly chosen chart type. */
@@ -264,7 +265,15 @@ fileInput.addEventListener("change", () => {
   fileInput.value = ""; // allow re-selecting the same file
 });
 
-// dropzone: drag & drop
+// global drag & drop shield: prevent browser from navigating away on dropped files
+window.addEventListener("dragover", (e) => e.preventDefault());
+window.addEventListener("drop", (e) => {
+  e.preventDefault();
+  const f = (e as DragEvent).dataTransfer?.files?.[0];
+  if (f) handleFile(f);
+});
+
+// dropzone visual cue
 ["dragenter", "dragover"].forEach((ev) =>
   dropEl.addEventListener(ev, (e) => {
     e.preventDefault();

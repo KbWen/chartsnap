@@ -538,8 +538,33 @@ Hardened through untrusted and adversarial audit: eliminates prototype chain con
 - [x] **SVG XSS & injection sanitization.** `theme.bg` in `renderSvgString` strips quotes, angle brackets, and ampersands (`replace(/["<>&]/g, "")`) and preset coordinates are rounded to prevent malformed XML injections or vector breakout.
 - [x] **Dual-layer `color-scheme` defense-in-depth.** In addition to `<meta name="color-scheme" content="light">` in `index.html`, `:root` in `src/style.css` declares `color-scheme: light;` to shield against forced dark mode background inversion in mobile browsers and embedded webviews.
 - [x] **Adversarial test suite with negative controls & Machado 2009 Tritanopia verification.** 28 zero-trust tests in `test/zero-trust.test.ts` assert prototype pollution resilience, theme immutability, and negative controls proving CVD/WCAG tripwires turn red on invalid palettes, plus verification of Tritanopia min pairwise $\Delta E00 \ge 9.0$ (~4× JND) across all themes.
-- [x] **Must keep working:** All 402 existing tests pass (+28 zero-trust tests + 1 asset test, 431 total); existing exports stay byte-deterministic; zero regressions on mobile or presets.
 
+## v1.10 — common real-world CSV & interaction resilience (completed 2026-10-12)
+
+Addresses common failure modes confirmed by PM panel review: currency/percentage formatting in tables, accounting negative numbers, standard missing value indicators, title rows above headers, ticker symbol defense, global drag-and-drop shield, and dropzone event bubbling.
+
+### Done criteria (v1.10)
+
+- [x] **Currency, percentage & accounting negative parsing:**
+      - Strips standard leading currency symbols (`$`, `NT$`, `NT`, `US$`, `USD`, `€`, `EUR`, `£`, `GBP`, `¥`, `JPY`, `RMB`) and trailing unit markers (`%`, `元`, `NTD`, `USD`) without failing numeric detection.
+      - Suffix `%` preserves face value (`45%` → `45`, not `0.45` or year `2045`).
+      - Preserves extracted currency/percentage unit in the series label or axis title without duplicating existing header units (e.g. `Revenue ($)` does not become `Revenue ($) ($)`).
+      - Multi-series charts with conflicting units (e.g. `$` and `%`) append a note explaining the unit discrepancy while labelling series distinctly.
+      - Supports accounting negative format (`(500)` or `(1,234.56)` → `-500` or `-1234.56`).
+      - Tenth-Man guard: Ticker symbols with leading `$` (e.g. `$AAPL`, `$TSLA`) are never treated as numbers because the remainder (`AAPL`) is non-numeric, keeping ticker columns as categories.
+- [x] **Missing value indicators tolerance:**
+      - Standard missing indicators (`N/A`, `NA`, `n/a`, `na`, `-`, `—`, `null`, `None`) are recognized as missing values rather than invalid category strings, allowing short tables with missing entries (e.g. 2 out of 3 rows numeric) to pass numeric column classification without dropping to text.
+      - A column containing only missing value indicators classifies as empty, not numeric.
+- [x] **Single title row above header detection:**
+      - When row 0 consists of a single title string (1 non-empty cell) while row 1 has multiple columns, row 0 is adopted as the chart title and row 1 is recognized as the column header.
+- [x] **Global drag-and-drop shield:**
+      - `window`/`document` prevents default dragover/drop navigation so dropping a CSV outside the dropzone box never navigates away from the web app, and files dropped anywhere on the window are handled.
+- [x] **Dropzone button semantics & DOM fix:**
+      - Hidden `<input type="file">` is placed outside `<button id="drop">`, eliminating invalid nested interactive content and preventing click event bubbling re-entrancy.
+- [x] **Result scroll feedback:**
+      - Rendering a chart from file upload or textarea paste smoothly scrolls the chart into view on small screens.
+- [x] **Must keep working:**
+      - All 431 existing tests pass (+11 v1.10 tests, 442 total); no regression on existing presets, exports, themes, or detection branches; zero CSP violations.
 
 ## Non-goals / Later / Not now
 

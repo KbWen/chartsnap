@@ -45,13 +45,77 @@ type NumberFormat = "us" | "eu";
 /** Digits and separators only; anything else can't tell us which convention is in use. */
 const NUMERIC_SHAPE = /^[+-]?\d[\d.,]*$/;
 
+/** Digits, separators and scientific notation. */
+const VALID_NUM_RE = /^[+-]?\d[\d.,]*(?:e[+-]?\d+)?$/i;
+
 /** A 1–3 digit lead, one separator, exactly three digits: "3.850", "2,500". */
 const GROUPED = /^[+-]?[1-9]\d{0,2}[.,]\d{3}$/;
+
+/** Standard missing/empty cell placeholders that should not disqualify numbers. */
+const NA_PLACEHOLDERS = new Set(["n/a", "na", "-", "—", "null", "none", "nan"]);
+export function isMissingValue(s: string): boolean {
+  const t = s.trim().toLowerCase();
+  return t === "" || NA_PLACEHOLDERS.has(t);
+}
+
+const ACCOUNTING_NEG = /^\((.+)\)$/;
+const CURRENCY_PREFIX = /^(?:\$|NT\$|NT|US\$|USD|€|EUR|£|GBP|¥|JPY|RMB)\s*/i;
+const UNIT_SUFFIX = /\s*(?:%|元|NTD|USD)$/i;
+
+export interface CleanedNumber {
+  cleaned: string;
+  unit?: string;
+}
+
+/**
+ * Extract units (currencies, %, 元) and normalize accounting negatives (500) -> -500.
+ * Guarded against stock ticker symbols ($AAPL, $TSLA): if the remainder is not numeric,
+ * the original string is preserved and no unit is assigned.
+ */
+export function cleanNumberString(s: string): CleanedNumber {
+  let t = s.trim();
+  if (!t || isMissingValue(t)) return { cleaned: "" };
+
+  let isNegative = false;
+  const paren = ACCOUNTING_NEG.exec(t);
+  if (paren) {
+    t = paren[1].trim();
+    isNegative = true;
+  }
+
+  let unit: string | undefined;
+
+  const prefixMatch = CURRENCY_PREFIX.exec(t);
+  if (prefixMatch) {
+    unit = prefixMatch[0].trim();
+    t = t.slice(prefixMatch[0].length).trim();
+  }
+
+  const suffixMatch = UNIT_SUFFIX.exec(t);
+  if (suffixMatch) {
+    unit ??= suffixMatch[0].trim();
+    t = t.slice(0, t.length - suffixMatch[0].length).trim();
+  }
+
+  // TENTH-MAN GUARD:
+  // Remainder MUST match VALID_NUM_RE!
+  // If someone passed "$AAPL", remainder is "AAPL" -> fails VALID_NUM_RE -> not a number.
+  if (!VALID_NUM_RE.test(t)) {
+    return { cleaned: s };
+  }
+
+  if (isNegative && !t.startsWith("-")) {
+    t = `-${t}`;
+  }
+
+  return { cleaned: t, unit };
+}
 
 interface NumberStyle {
   format: NumberFormat;
   /** "ambiguous": the sample's magnitude rests on an inference. "mixed": the column self-contradicts. */
   warn?: { kind: "ambiguous" | "mixed"; sample: string };
+  unit?: string;
 }
 
 /**
@@ -72,10 +136,14 @@ function detectNumberStyle(raw: string[]): NumberStyle {
   let dotTriple: string | undefined;
   let commaTriple: string | undefined;
 
-  for (const cell of raw) {
-    const t = cell.trim();
-    if (!t || !NUMERIC_SHAPE.test(t)) continue;
+  const unitCounts = new Map<string, number>();
 
+  for (const cell of raw) {
+    const { cleaned, unit } = cleanNumberString(cell);
+    if (!cleaned || !NUMERIC_SHAPE.test(cleaned)) continue;
+    if (unit) unitCounts.set(unit, (unitCounts.get(unit) ?? 0) + 1);
+
+    const t = cleaned;
     const dots = t.split(".").length - 1;
     const commas = t.split(",").length - 1;
 
@@ -101,20 +169,29 @@ function detectNumberStyle(raw: string[]): NumberStyle {
     }
   }
 
+  let dominantUnit: string | undefined;
+  let maxUnitCount = 0;
+  for (const [u, count] of unitCounts) {
+    if (count > maxUnitCount) {
+      maxUnitCount = count;
+      dominantUnit = u;
+    }
+  }
+
   const eu = dotGrouping ?? commaDecimal;
   const us = dotDecimal ?? commaGrouping;
-  if (eu && us) return { format: "us", warn: { kind: "mixed", sample: eu } };
+  if (eu && us) return { format: "us", warn: { kind: "mixed", sample: eu }, unit: dominantUnit };
 
   const format: NumberFormat = eu ? "eu" : "us";
 
   // "3.850" is worth a note unless something proved the dot groups: otherwise its
   // magnitude hangs on an inference, and being wrong scales it by 1000.
-  if (dotTriple && !dotGrouping) return { format, warn: { kind: "ambiguous", sample: dotTriple } };
+  if (dotTriple && !dotGrouping) return { format, warn: { kind: "ambiguous", sample: dotTriple }, unit: dominantUnit };
   // "2,500" only earns a note once a comma is proven to be a decimal point somewhere —
   // on its own it is ordinary US thousands, and a comma with three decimals is rare.
-  if (commaTriple && commaDecimal) return { format, warn: { kind: "ambiguous", sample: commaTriple } };
+  if (commaTriple && commaDecimal) return { format, warn: { kind: "ambiguous", sample: commaTriple }, unit: dominantUnit };
 
-  return { format };
+  return { format, unit: dominantUnit };
 }
 
 /**
@@ -128,10 +205,10 @@ const US_GROUPING = /,(?=\d{3}([.,]|$))/g;
 const EU_GROUPING = /\.(?=\d{3}([.,]|$))/g;
 
 function toNumber(s: string, format: NumberFormat): number {
-  const t = s.trim();
-  if (t === "") return NaN;
+  const { cleaned } = cleanNumberString(s);
+  if (cleaned === "" || !VALID_NUM_RE.test(cleaned)) return NaN;
   const plain =
-    format === "eu" ? t.replace(EU_GROUPING, "").replace(",", ".") : t.replace(US_GROUPING, "");
+    format === "eu" ? cleaned.replace(EU_GROUPING, "").replace(",", ".") : cleaned.replace(US_GROUPING, "");
   const n = Number(plain);
   return Number.isFinite(n) ? n : NaN;
 }
@@ -195,7 +272,7 @@ const YEAR_HEADER = /(^|[^a-z])(year|yr|years)([^a-z]|$)|年/i;
 
 function cleanTime(s: string, bareYearOk: boolean): number {
   const t = s.trim();
-  if (t === "") return NaN;
+  if (t === "" || isMissingValue(t)) return NaN;
 
   // An ISO date-only string means UTC midnight, but the axis draws in local time — so
   // west of UTC "2025-01-01" would land on the tick "Dec 31". Build bare calendar dates
@@ -230,17 +307,18 @@ function classify(
   times: number[];
   style: NumberStyle;
   bareYears: boolean;
+  unit?: string;
 } {
   const style = detectNumberStyle(raw);
   const bareYearOk = YEAR_HEADER.test(name);
   const nums = raw.map((v) => toNumber(v, style.format));
   const times = raw.map((v) => cleanTime(v, bareYearOk));
-  const nonEmpty = raw.filter((v) => v.trim() !== "").length;
+  const nonEmpty = raw.filter((v) => !isMissingValue(v)).length;
   // Only a column made *entirely* of bare years earns a year-ticked axis.
   const bareYears =
-    bareYearOk && nonEmpty > 0 && raw.every((v) => v.trim() === "" || /^\d{4}$/.test(v.trim()));
+    bareYearOk && nonEmpty > 0 && raw.every((v) => isMissingValue(v) || /^\d{4}$/.test(v.trim()));
 
-  const base = { nums, times, style, bareYears };
+  const base = { nums, times, style, bareYears, unit: style.unit };
   if (nonEmpty === 0) return { type: "empty", ...base };
 
   const numHits = nums.filter((n) => !Number.isNaN(n)).length;
@@ -331,6 +409,15 @@ export function parseCsv(text: string): ParsedCsv {
     throw new CsvError("Need a header row plus at least one data row.");
   }
 
+  let extractedTitle: string | undefined;
+  // If row 0 has only 1 non-empty cell while row 1 has 2 or more non-empty cells,
+  // and total rows >= 3, treat row 0 as a report/document title.
+  const row0Cells = rows[0].filter((c) => c.trim() !== "");
+  if (rows.length >= 3 && row0Cells.length === 1 && rows[1].filter((c) => c.trim() !== "").length >= 2) {
+    extractedTitle = row0Cells[0].trim();
+    rows.shift();
+  }
+
   const header = rows[0].map((h, i) => (h?.trim() ? h.trim() : `Column ${i + 1}`));
   let body = rows.slice(1);
 
@@ -353,7 +440,7 @@ export function parseCsv(text: string): ParsedCsv {
 
   const columns: Column[] = header.map((name, c) => {
     const raw = body.map((row) => row[c] ?? "");
-    const { type, nums, times, style, bareYears } = classify(raw, name);
+    const { type, nums, times, style, bareYears, unit } = classify(raw, name);
     // A self-contradicting column often falls short of the numeric threshold and drops to
     // "category" — say why, rather than letting it vanish from the chart unexplained.
     const worthSaying = type === "number" || (type === "category" && style.warn?.kind === "mixed");
@@ -366,7 +453,7 @@ export function parseCsv(text: string): ParsedCsv {
       const unread = unreadDateNote(name, raw);
       if (unread) notes.push(unread);
     }
-    return { name, type, raw, nums, times, bareYears };
+    return { name, type, raw, nums, times, bareYears, unit };
   });
 
   return {
@@ -374,5 +461,6 @@ export function parseCsv(text: string): ParsedCsv {
     rowCount: body.length,
     originalRowCount: sampled ? originalRowCount : undefined,
     notes,
+    extractedTitle,
   };
 }

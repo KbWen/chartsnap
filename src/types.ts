@@ -11,6 +11,8 @@ export interface Column {
   times: number[];
   /** True when this date column came from bare 4-digit years, so the axis can label by year. */
   bareYears?: boolean;
+  /** Currency, percentage or unit symbol extracted from numeric values (e.g. "$", "%", "€"). */
+  unit?: string;
 }
 
 export interface ParsedCsv {
@@ -21,6 +23,8 @@ export interface ParsedCsv {
   originalRowCount?: number;
   /** Human-facing warnings surfaced in the UI (non-fatal). */
   notes: string[];
+  /** Document title extracted from a single-cell row 0 above the header, if detected. */
+  extractedTitle?: string;
 }
 
 export type ChartType = "line" | "bar" | "scatter";
