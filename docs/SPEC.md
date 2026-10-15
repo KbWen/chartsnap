@@ -566,6 +566,20 @@ Addresses common failure modes confirmed by PM panel review: currency/percentage
 - [x] **Must keep working:**
       - All 431 existing tests pass (+11 v1.10 tests, 442 total); no regression on existing presets, exports, themes, or detection branches; zero CSP violations.
 
+## v1.10.1 — drop event deduplication & currency-first accounting negatives (decided 2026-10-15)
+
+Remediates the Tenth-Man adversarial audit findings: (1) event bubbling on `#drop` triggering double-processing of dropped CSV files; (2) accounting currency strings where currency symbol precedes the parentheses (e.g. `$(500)` or `NT$(1,234.56)`).
+
+### Done criteria (v1.10.1)
+
+- [x] **Dropzone drop event deduplication:**
+      - Dropping a CSV onto `#drop` calls `e.stopPropagation()`, ensuring `handleFile` is invoked exactly once and not re-triggered by the global `window` drop listener.
+- [x] **Currency-first accounting negatives (`$(500)`):**
+      - `cleanNumberString` handles accounting negative parentheses both outside (`($500)`) and inside (`$(500)` or `NT$(1,234.56)`) the currency prefix. Returns `cleaned: "-500"` and extracted `unit: "$"`.
+      - Stock ticker defense holds: `$AAPL` and `$(AAPL)` remain categories, never treated as numbers.
+- [x] **Must keep working:**
+      - All 442 existing tests pass (+6 v1.10.1 tests, 448 total); PNG and SVG exports remain byte-deterministic; zero CSP violations.
+
 ## Non-goals / Later / Not now
 
 - NO field/axis mapping or chart-type gallery UI (that is RAWGraphs' turf — we lose if we

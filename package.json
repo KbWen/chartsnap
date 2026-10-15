@@ -1,6 +1,6 @@
 {
   "name": "chartsnap",
-  "version": "1.10.0",
+  "version": "1.10.1",
   "description": "Drop a CSV, get a share-ready chart. Zero config, 100% client-side, free PNG + SVG export.",
   "type": "module",
   "license": "MIT",

@@ -287,6 +287,7 @@ window.addEventListener("drop", (e) => {
   })
 );
 dropEl.addEventListener("drop", (e) => {
+  e.stopPropagation();
   const f = (e as DragEvent).dataTransfer?.files?.[0];
   if (f) handleFile(f);
 });

@@ -77,20 +77,37 @@ export function cleanNumberString(s: string): CleanedNumber {
   if (!t || isMissingValue(t)) return { cleaned: "" };
 
   let isNegative = false;
-  const paren = ACCOUNTING_NEG.exec(t);
-  if (paren) {
-    t = paren[1].trim();
+
+  // 1. Check outer parentheses: (500) or ($500)
+  const parenOuter = ACCOUNTING_NEG.exec(t);
+  if (parenOuter) {
+    t = parenOuter[1].trim();
     isNegative = true;
+  }
+
+  // 2. Check leading minus sign before currency: -$500
+  if (t.startsWith("-")) {
+    isNegative = true;
+    t = t.slice(1).trim();
   }
 
   let unit: string | undefined;
 
+  // 3. Extract currency prefix: $500 or $(500)
   const prefixMatch = CURRENCY_PREFIX.exec(t);
   if (prefixMatch) {
     unit = prefixMatch[0].trim();
     t = t.slice(prefixMatch[0].length).trim();
   }
 
+  // 4. Check inner parentheses if currency was outside: $(500) or $ (1,234.56)
+  const parenInner = ACCOUNTING_NEG.exec(t);
+  if (parenInner) {
+    t = parenInner[1].trim();
+    isNegative = true;
+  }
+
+  // 5. Check trailing unit: % or 元 or NTD
   const suffixMatch = UNIT_SUFFIX.exec(t);
   if (suffixMatch) {
     unit ??= suffixMatch[0].trim();
@@ -99,7 +116,7 @@ export function cleanNumberString(s: string): CleanedNumber {
 
   // TENTH-MAN GUARD:
   // Remainder MUST match VALID_NUM_RE!
-  // If someone passed "$AAPL", remainder is "AAPL" -> fails VALID_NUM_RE -> not a number.
+  // If someone passed "$AAPL", "$(AAPL)" or "$TSLA", remainder is "AAPL" -> fails VALID_NUM_RE -> not a number.
   if (!VALID_NUM_RE.test(t)) {
     return { cleaned: s };
   }
