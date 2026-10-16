@@ -580,6 +580,41 @@ Remediates the Tenth-Man adversarial audit findings: (1) event bubbling on `#dro
 - [x] **Must keep working:**
       - All 442 existing tests pass (+6 v1.10.1 tests, 448 total); PNG and SVG exports remain byte-deterministic; zero CSP violations.
 
+## v1.10.2 — Tenth-Man audit remediation: header survival, pure notes, date-note guard, parser & test integrity (shipped 2026-10-16)
+
+Remediates all P0/P1/P2 defects uncovered and verified by executed runs in the 2026-10-16 adversarial audit:
+
+### Done criteria (v1.10.2)
+
+- [x] **Partially blank header rows survive (`",votes\nApples,30..."` and `"item,\nApples,30..."`).**
+      - Fix `parseCsv`'s single-cell title row detector so a multi-column header with only one named column (such as pandas `df.to_csv()` / R `write.csv()` unnamed index column `,votes` or unnamed value column `item,`) is never mistaken for a report title.
+      - Specifically, row 0 is only extracted as `extractedTitle` when `rows.length >= 3`, the single non-empty cell is at column 0 (`rows[0][0].trim() !== ""`), and either `rows[0].length === 1` (un-delimited title line) or `rows[1]` consists entirely of non-numeric header strings (`rows[1].every(c => c.trim() === "" || Number.isNaN(toNumber(c, "us")))`).
+      - **Must keep working:** `"Annual Sales Report 2025\nYear,Revenue\n2023,100"` and Excel merged title rows `"Annual Sales Report 2025,\nYear,Revenue\n2023,100"` still extract `extractedTitle: "Annual Sales Report 2025"` and use `Year, Revenue` as headers; `",\n1,2\n3,4"` still becomes `Column 1, Column 2`.
+
+- [x] **Mixed-unit warning is side-effect-free, shown on initial UI render, and never fires on scatter plots.**
+      - Remove `parsed.notes.push(mixedNote)` from `buildConfig` (`src/chart.ts`), restoring strict immutability of `ParsedCsv` and `parsed.notes` across renders (`Object.freeze(parsed.notes)` on a multi-unit CSV must not throw).
+      - Compute the mixed-unit warning for shared-axis multi-series charts (`detection.type !== "scatter" && detection.yColumns.length > 1`) via pure `mixedUnitsNote` / `collectNotes` (`src/a11y.ts`) and surface it in `showNotes` (`src/main.ts`) so `#notes` displays the warning immediately on the first `render()`, not only after a subsequent re-render.
+      - **Must keep working:** Scatter plots with different X and Y units (e.g. `Spend ($)` vs `ROI (%)`) do NOT emit a "mixed units on the same axis" warning, because scatter plots them on two orthogonal axes.
+
+- [x] **`unreadDateNote` never false-triggers on ordinary category labels (`Store 1`, `Item 2`, `Week 4`).**
+      - Gate `unreadDateNote` (`src/csv.ts`) with a structural date-shape pre-check before calling V8's `Date.parse`: a cell is only considered a "refused date" if it contains date-like numeric separators (`/\d\s*[/. -]\s*\d\s*[/. -]\s*\d/`) or a recognized month token (`MONTH_NAME`) alongside digits.
+      - **Must flag:** `01/02/2025`, `1/5/2025`, `Jan-25`, `114/01/05`.
+      - **Must stay silent:** `Store 1, Store 2, Store 3`, `Item 1..3`, `Phase 1..3`, `Week 1..4`, `Model 3`.
+
+- [x] **Chart-type override (`setChartType`) preserves explicit titles (`sourceTitle` and `extractedTitle`).**
+      - Keep `sourceTitle` in `main.ts` state and resolve titles via `resolveTitle(detection, parsed, sourceTitle)` (`src/a11y.ts`) so clicking the `line` / `bar` / `scatter` override toggle keeps the file title, sample chip title, or `parsed.extractedTitle`, falling back to `autoTitle(detection)` only when the chart title was auto-generated (e.g. raw pasted CSV without a title row).
+
+- [x] **Number/currency edge cases, token-aware unit deduplication, scatter a11y units, and `registerTheme` bounds:**
+      - `cleanNumberString` (`src/csv.ts`): support leading `NTD` before `NT` (`"NTD 1,200"` → `{ cleaned: "1,200", unit: "NTD" }`), support leading `+` before currency (`"+$500"` → `{ cleaned: "500", unit: "$" }`), and reject double signs (`"--500"`, `"+-500"`, `"-+500"`, `"(-500)"`, `"(+500)"`) so they are not parsed as numbers.
+      - `formatTitleWithUnit` (`src/a11y.ts`, re-exported by `src/chart.ts`): match alphabetic units (`NT`, `USD`, `EUR`, `NTD`) on case-insensitive word/non-letter boundaries instead of bare `.includes()`, so `"Amount"` + `"NT"` becomes `"Amount (NT)"` while `"Revenue (usd)"` + `"USD"` is not duplicated.
+      - `src/a11y.ts`: format scatter X and Y headers in `populateSrTable` and column names in `buildSrSummary` using `formatTitleWithUnit`, matching the visual chart axes.
+      - `registerTheme` (`src/themes.ts`): require `theme.palette.length >= MAX_SERIES` (6) and restrict hex colors in `SAFE_COLOR_RE` to valid 3, 4, 6, or 8 hex digits.
+
+- [x] **Real behavioural tests replace tautological mocks, and `npm test` never dirty-writes `docs/*.png`:**
+      - Replace inline mock listeners in `test/a11y.test.ts`, `test/v18.test.ts`, and `test/v1101.test.ts` with tests that execute the real application logic (`bindDropzoneEvents`, `isTabularPaste`, `resolveTitle`, `collectNotes`), paired with negative controls.
+      - Gate disk writes in `test/generate-assets.test.ts` behind `process.env.GENERATE_ASSETS === "1"` (while adding real `expect()` assertions on the rendered PNG buffers and palette hex captions during tests), restore `docs/hero.png` to the weekly commits dataset described by `README.md:11` and `SPEC.md:282`, and fix the palette hex captions in `docs/themes-preview.png` to match `THEMES.corporate.palette` and `THEMES.nordic.palette`.
+      - **Must keep working:** All 468 tests across 22 suites pass; `npm run build` succeeds; PNG and SVG exports remain byte-deterministic; zero CSP violations.
+
 ## Non-goals / Later / Not now
 
 - NO field/axis mapping or chart-type gallery UI (that is RAWGraphs' turf — we lose if we

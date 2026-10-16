@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
+import { bindDropzoneEvents } from "../src/a11y";
 import { cleanNumberString, parseCsv } from "../src/csv";
 import { detectChart } from "../src/detect";
 import { buildConfig } from "../src/chart";
@@ -53,40 +54,43 @@ describe("v1.10.1: Currency-First Accounting Negatives ($(500))", () => {
   });
 });
 
-describe("v1.10.1: Dropzone Drop Event Deduplication", () => {
-  it("stopping event propagation on dropzone prevents duplicate window drop execution", () => {
+describe("v1.10.1: Dropzone Drop Event Deduplication (Real Production Handler)", () => {
+  it("bindDropzoneEvents stops propagation on #drop so dropping a file invokes onFile exactly once", () => {
     const dropzone = document.createElement("button");
     dropzone.id = "drop";
     document.body.appendChild(dropzone);
 
-    const handleFileSpy = vi.fn();
+    const onFileSpy = vi.fn();
+    bindDropzoneEvents(dropzone, window, onFileSpy);
 
-    // Mirroring main.ts event listener structure:
-    window.addEventListener("drop", (e) => {
-      e.preventDefault();
-      handleFileSpy("window");
+    const fakeFile = new File(["a,b\n1,2"], "test.csv", { type: "text/csv" });
+
+    // 1. Dragenter adds .dragging class; drop removes it and stops bubbling to window
+    const dragEnter = new Event("dragenter", { bubbles: true, cancelable: true });
+    dropzone.dispatchEvent(dragEnter);
+    expect(dropzone.classList.contains("dragging")).toBe(true);
+
+    const dropOnZone = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(dropOnZone, "dataTransfer", {
+      value: { files: [fakeFile] },
     });
+    dropzone.dispatchEvent(dropOnZone);
 
-    dropzone.addEventListener("drop", (e) => {
-      e.stopPropagation();
-      handleFileSpy("dropzone");
+    expect(dropzone.classList.contains("dragging")).toBe(false);
+    // If stopPropagation() were missing in bindDropzoneEvents, bubbling to window would call onFileSpy twice!
+    expect(onFileSpy).toHaveBeenCalledTimes(1);
+    expect(onFileSpy).toHaveBeenCalledWith(fakeFile);
+
+    // 2. Dropping outside the dropzone (on document.body -> bubbles to window) still works
+    onFileSpy.mockClear();
+    const dropOutside = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(dropOutside, "dataTransfer", {
+      value: { files: [fakeFile] },
     });
+    document.body.dispatchEvent(dropOutside);
 
-    // 1. Drop on dropzone
-    const dropEvent = new Event("drop", { bubbles: true, cancelable: true });
-    dropzone.dispatchEvent(dropEvent);
-
-    // Expect handleFileSpy called ONLY ONCE by dropzone, not by window
-    expect(handleFileSpy).toHaveBeenCalledTimes(1);
-    expect(handleFileSpy).toHaveBeenCalledWith("dropzone");
-
-    // 2. Drop elsewhere on window
-    handleFileSpy.mockClear();
-    const windowDropEvent = new Event("drop", { bubbles: true, cancelable: true });
-    window.dispatchEvent(windowDropEvent);
-
-    expect(handleFileSpy).toHaveBeenCalledTimes(1);
-    expect(handleFileSpy).toHaveBeenCalledWith("window");
+    expect(onFileSpy).toHaveBeenCalledTimes(1);
+    expect(onFileSpy).toHaveBeenCalledWith(fakeFile);
 
     dropzone.remove();
   });

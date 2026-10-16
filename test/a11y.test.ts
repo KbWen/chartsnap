@@ -5,7 +5,7 @@ import { resolve } from "path";
 import { parseCsv, scrub } from "../src/csv";
 import { detectChart } from "../src/detect";
 import { buildConfig } from "../src/chart";
-import { autoTitle, buildSrSummary, populateSrTable } from "../src/a11y";
+import { autoTitle, buildSrSummary, populateSrTable, resolveTitle } from "../src/a11y";
 
 function setupDOM(): void {
   const html = readFileSync(resolve(__dirname, "../index.html"), "utf-8");
@@ -49,19 +49,13 @@ describe("v1.6 Accessibility: Dropzone Semantics", () => {
     expect(name).toMatch(/choose|csv|drop/i);
   });
 
-  it("clicking dropzone delegates click to hidden file input", () => {
+  it("dropzone and file input are separate sibling controls in index.html (no nested interactive content)", () => {
     const drop = document.getElementById("drop") as HTMLButtonElement;
     const file = document.getElementById("file") as HTMLInputElement;
     expect(drop).not.toBeNull();
     expect(file).not.toBeNull();
-
-    let fileClicked = false;
-    file.click = () => {
-      fileClicked = true;
-    };
-    drop.addEventListener("click", () => file.click());
-    drop.click();
-    expect(fileClicked).toBe(true);
+    expect(drop.contains(file)).toBe(false);
+    expect(file.hidden).toBe(true);
   });
 });
 
@@ -76,41 +70,36 @@ describe("v1.6 Accessibility: Title in DOM", () => {
     expect(titleEl?.tagName.toLowerCase()).toBe("h2");
   });
 
-  it("asserts title on all three distinct title paths: file, paste, chip", () => {
+  it("resolveTitle resolves all distinct title paths (file, extractedTitle, paste, chip) and preserves explicit titles on chart-type override", () => {
     const csvData = "date,sales\n2025-01-01,100\n2025-02-01,150";
     const parsed = parseCsv(csvData);
-    const detection = detectChart(parsed);
+    const lineDet = detectChart(parsed);
+    const barDet = detectChart(parsed, "bar");
 
-    // Path 1: File path uses scrubbed filename
+    // Path 1: File path uses scrubbed filename and preserves it across chart-type override
     const fileRawName = "q3_quarterly_report.csv";
-    const fileTitle = scrub(fileRawName.replace(/\.[^.]+$/, ""));
+    const fileSource = scrub(fileRawName.replace(/\.[^.]+$/, ""));
+    const fileTitle = resolveTitle(lineDet, parsed, fileSource);
     expect(fileTitle).toBe("q3_quarterly_report");
+    expect(resolveTitle(barDet, parsed, fileSource)).toBe("q3_quarterly_report");
 
-    // Path 2: Paste path uses autoTitle
-    const pasteTitle = autoTitle(detection);
+    // Path 2: Paste path without title row uses autoTitle and updates on chart-type override
+    const pasteTitle = resolveTitle(lineDet, parsed, undefined);
     expect(pasteTitle).toBe("sales over date");
+    expect(resolveTitle(barDet, parsed, undefined)).toBe("sales by date");
 
-    // Path 3: Sample chip uses literal title
-    const chipTitle = "Monthly sales";
+    // Path 3: Sample chip uses literal title and preserves it across chart-type override
+    const chipTitle = resolveTitle(lineDet, parsed, "Monthly sales");
+    expect(chipTitle).toBe("Monthly sales");
+    expect(resolveTitle(barDet, parsed, "Monthly sales")).toBe("Monthly sales");
 
-    // All three must differ so a test hardcoding one fails on the other two
-    expect(fileTitle).not.toBe(pasteTitle);
-    expect(fileTitle).not.toBe(chipTitle);
-    expect(pasteTitle).not.toBe(chipTitle);
+    // Path 4: CSV with extractedTitle preserves extractedTitle across chart-type override
+    const csvWithReportTitle = parseCsv("Board Q4 Summary\ndate,sales\n2025-01-01,100\n2025-02-01,150");
+    expect(resolveTitle(detectChart(csvWithReportTitle), csvWithReportTitle, undefined)).toBe("Board Q4 Summary");
+    expect(resolveTitle(detectChart(csvWithReportTitle, "bar"), csvWithReportTitle, undefined)).toBe("Board Q4 Summary");
 
-    const titleEl = document.getElementById("chart-title")!;
-
-    // Test File path
-    titleEl.textContent = fileTitle;
-    expect(titleEl.textContent).toBe("q3_quarterly_report");
-
-    // Test Paste path
-    titleEl.textContent = pasteTitle;
-    expect(titleEl.textContent).toBe("sales over date");
-
-    // Test Chip path
-    titleEl.textContent = chipTitle;
-    expect(titleEl.textContent).toBe("Monthly sales");
+    // All paths produce distinct titles so a test hardcoding one fails on the others
+    expect(new Set([fileTitle, pasteTitle, chipTitle]).size).toBe(3);
   });
 });
 

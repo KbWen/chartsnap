@@ -1,3 +1,4 @@
+import { MAX_SERIES } from "./detect";
 import type { ChartTheme } from "./types";
 
 /**
@@ -41,7 +42,7 @@ export const THEMES: Record<string, ChartTheme> = {
 export const DEFAULT_THEME_ID = "editorial";
 
 const SAFE_COLOR_RE =
-  /^#([0-9a-fA-F]{3,8})$|^[a-zA-Z]+$|^rgba?\([0-9,.\s%]+\)$|^hsla?\([0-9,.\s%]+\)$/;
+  /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$|^[a-zA-Z]+$|^rgba?\([0-9,.\s%]+\)$|^hsla?\([0-9,.\s%]+\)$/;
 
 function isValidColor(c: unknown): boolean {
   return typeof c === "string" && SAFE_COLOR_RE.test(c.trim());
@@ -79,7 +80,11 @@ export function registerTheme(theme: ChartTheme): boolean {
   ) {
     return false;
   }
-  if (!Array.isArray(theme.palette) || theme.palette.length === 0 || !theme.palette.every(isValidColor)) {
+  if (
+    !Array.isArray(theme.palette) ||
+    theme.palette.length < MAX_SERIES ||
+    !theme.palette.every(isValidColor)
+  ) {
     return false;
   }
 

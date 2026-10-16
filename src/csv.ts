@@ -59,7 +59,7 @@ export function isMissingValue(s: string): boolean {
 }
 
 const ACCOUNTING_NEG = /^\((.+)\)$/;
-const CURRENCY_PREFIX = /^(?:\$|NT\$|NT|US\$|USD|€|EUR|£|GBP|¥|JPY|RMB)\s*/i;
+const CURRENCY_PREFIX = /^(?:\$|NT\$|NTD|NT|US\$|USD|€|EUR|£|GBP|¥|JPY|RMB)\s*/i;
 const UNIT_SUFFIX = /\s*(?:%|元|NTD|USD)$/i;
 
 export interface CleanedNumber {
@@ -77,23 +77,26 @@ export function cleanNumberString(s: string): CleanedNumber {
   if (!t || isMissingValue(t)) return { cleaned: "" };
 
   let isNegative = false;
+  let hasOuterSign = false;
 
   // 1. Check outer parentheses: (500) or ($500)
   const parenOuter = ACCOUNTING_NEG.exec(t);
   if (parenOuter) {
     t = parenOuter[1].trim();
     isNegative = true;
+    hasOuterSign = true;
   }
 
-  // 2. Check leading minus sign before currency: -$500
-  if (t.startsWith("-")) {
-    isNegative = true;
+  // 2. Check leading sign before currency: -$500 or +$500
+  if (!hasOuterSign && (t.startsWith("-") || t.startsWith("+"))) {
+    if (t.startsWith("-")) isNegative = true;
+    hasOuterSign = true;
     t = t.slice(1).trim();
   }
 
   let unit: string | undefined;
 
-  // 3. Extract currency prefix: $500 or $(500)
+  // 3. Extract currency prefix: $500 or $(500) or NTD 1,200
   const prefixMatch = CURRENCY_PREFIX.exec(t);
   if (prefixMatch) {
     unit = prefixMatch[0].trim();
@@ -101,10 +104,11 @@ export function cleanNumberString(s: string): CleanedNumber {
   }
 
   // 4. Check inner parentheses if currency was outside: $(500) or $ (1,234.56)
-  const parenInner = ACCOUNTING_NEG.exec(t);
+  const parenInner = !hasOuterSign ? ACCOUNTING_NEG.exec(t) : null;
   if (parenInner) {
     t = parenInner[1].trim();
     isNegative = true;
+    hasOuterSign = true;
   }
 
   // 5. Check trailing unit: % or 元 or NTD
@@ -114,6 +118,11 @@ export function cleanNumberString(s: string): CleanedNumber {
     t = t.slice(0, t.length - suffixMatch[0].length).trim();
   }
 
+  // Reject double signs (e.g. "--500", "+-500", "-+500", "(-500)")
+  if (hasOuterSign && (t.startsWith("-") || t.startsWith("+"))) {
+    return { cleaned: s };
+  }
+
   // TENTH-MAN GUARD:
   // Remainder MUST match VALID_NUM_RE!
   // If someone passed "$AAPL", "$(AAPL)" or "$TSLA", remainder is "AAPL" -> fails VALID_NUM_RE -> not a number.
@@ -121,6 +130,9 @@ export function cleanNumberString(s: string): CleanedNumber {
     return { cleaned: s };
   }
 
+  if (t.startsWith("+")) {
+    t = t.slice(1);
+  }
   if (isNegative && !t.startsWith("-")) {
     t = `-${t}`;
   }
@@ -364,6 +376,11 @@ function sampleIndices(n: number, target: number): number[] {
 const XML_ILLEGAL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
 export const scrub = (s: string): string => s.replace(XML_ILLEGAL, "");
 
+const LOOKS_DATE_LIKE = new RegExp(
+  `(?:\\d+\\s*[/.\\-]\\s*\\d+\\s*[/.\\-]\\s*\\d+)|(?:\\b(?:${MONTH_NAME})\\b.*\\d)|(?:\\d.*\\b(?:${MONTH_NAME})\\b)`,
+  "i"
+);
+
 /**
  * A column of things that look like dates but that chartsnap won't guess at.
  *
@@ -374,10 +391,14 @@ export const scrub = (s: string): string => s.replace(XML_ILLEGAL, "");
  * one thing this must not be is quiet.
  */
 function unreadDateNote(column: string, raw: string[]): string | null {
-  const cells = raw.map((c) => c.trim()).filter((c) => c !== "");
+  const cells = raw.map((c) => c.trim()).filter((c) => !isMissingValue(c));
   if (cells.length === 0) return null;
   // Cells a lenient parser would have taken and we deliberately would not.
-  const refused = cells.filter((c) => !Number.isNaN(Date.parse(c)) && Number.isNaN(cleanTime(c, false)));
+  // Pre-check LOOKS_DATE_LIKE so V8's Date.parse("Store 1") = 2001-01-01 never false-flags
+  // ordinary category labels ("Store 1", "Item 2", "Week 4").
+  const refused = cells.filter(
+    (c) => LOOKS_DATE_LIKE.test(c) && !Number.isNaN(Date.parse(c)) && Number.isNaN(cleanTime(c, false))
+  );
   if (refused.length / cells.length < TYPE_THRESHOLD) return null;
   return `“${column}” looks like dates in a format that could be read more than one way (e.g. “${refused[0]}”), so it's charted as plain text rather than guessed at. Re-save it as YYYY-MM-DD for a time axis.`;
 }
@@ -427,11 +448,24 @@ export function parseCsv(text: string): ParsedCsv {
   }
 
   let extractedTitle: string | undefined;
-  // If row 0 has only 1 non-empty cell while row 1 has 2 or more non-empty cells,
-  // and total rows >= 3, treat row 0 as a report/document title.
+  // If row 0 has only 1 non-empty cell (at column 0) while row 1 has 2 or more non-empty
+  // header cells, and total rows >= 3, treat row 0 as a report/document title.
+  // Guard against partially-blank header rows:
+  // - ",votes\nApples,30\nPears,45" (pandas/R unnamed index column: col 0 is empty)
+  // - "item,\nApples,30\nPears,45" (unnamed value column: row 1 already contains numeric data)
   const row0Cells = rows[0].filter((c) => c.trim() !== "");
-  if (rows.length >= 3 && row0Cells.length === 1 && rows[1].filter((c) => c.trim() !== "").length >= 2) {
-    extractedTitle = row0Cells[0].trim();
+  const row0FirstCell = (rows[0][0] ?? "").trim();
+  const row1NonEmpty = rows[1].filter((c) => c.trim() !== "");
+  const row1LooksLikeHeader =
+    rows[0].length === 1 || row1NonEmpty.every((c) => Number.isNaN(toNumber(c, "us")));
+  if (
+    rows.length >= 3 &&
+    row0Cells.length === 1 &&
+    row0FirstCell !== "" &&
+    row1NonEmpty.length >= 2 &&
+    row1LooksLikeHeader
+  ) {
+    extractedTitle = row0FirstCell;
     rows.shift();
   }
 

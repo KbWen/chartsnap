@@ -1,11 +1,91 @@
 import type { ChartConfiguration } from "chart.js";
 import type { Detection, ParsedCsv } from "./types";
 
+const escapeUnitRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+export function formatTitleWithUnit(name: string, unit?: string): string {
+  if (!unit || !name) return name;
+  const trimmed = name.trim();
+  const isAlphaUnit = /^[a-zA-Z]+$/.test(unit);
+  const alreadyHasUnit = isAlphaUnit
+    ? new RegExp(`(^|[^a-zA-Z])${escapeUnitRe(unit)}([^a-zA-Z]|$)`, "i").test(trimmed)
+    : trimmed.toLowerCase().includes(unit.toLowerCase());
+  if (alreadyHasUnit) return trimmed;
+  return `${trimmed} (${unit})`;
+}
+
 export function autoTitle(d: Detection): string {
   const ys = d.yColumns.map((c) => c.name);
   if (d.type === "scatter") return `${d.yColumns[1].name} vs ${d.yColumns[0].name}`;
   if (d.type === "line") return `${ys.join(", ")} over ${d.xColumn.name}`;
   return `${ys.join(", ")} by ${d.xColumn.name}`;
+}
+
+export function resolveTitle(detection: Detection, parsed: ParsedCsv, sourceTitle?: string): string {
+  return sourceTitle?.trim() || parsed.extractedTitle || autoTitle(detection);
+}
+
+export function mixedUnitsNote(detection: Detection): string | null {
+  if (detection.type === "scatter" || detection.yColumns.length <= 1) return null;
+  const distinctUnits = Array.from(
+    new Set(detection.yColumns.map((c) => c.unit).filter((u): u is string => Boolean(u)))
+  );
+  if (distinctUnits.length <= 1) return null;
+  return `Multi-series chart contains mixed units (${distinctUnits.join(", ")}) on the same axis — values may differ significantly in scale.`;
+}
+
+export function collectNotes(parsed: ParsedCsv, detection: Detection): string[] {
+  const lines = [...parsed.notes];
+  const dropped = detection.droppedSeries;
+  if (dropped.length > 0) {
+    const shown = detection.yColumns.length;
+    lines.push(
+      `Charting ${shown} of ${shown + dropped.length} numeric columns — left out: ${dropped.join(", ")}.`
+    );
+  }
+  const mixed = mixedUnitsNote(detection);
+  if (mixed && !lines.includes(mixed)) {
+    lines.push(mixed);
+  }
+  return lines;
+}
+
+export function isTabularPaste(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const hasLinebreak = text.includes("\n") || text.includes("\r");
+  const hasDelimiter = text.includes(",") || text.includes("\t") || text.includes(";");
+  return hasLinebreak && hasDelimiter;
+}
+
+export function bindDropzoneEvents(
+  dropEl: HTMLElement,
+  win: EventTarget,
+  onFile: (file: File) => void
+): void {
+  win.addEventListener("dragover", (e) => e.preventDefault());
+  win.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const f = (e as DragEvent).dataTransfer?.files?.[0];
+    if (f) onFile(f);
+  });
+
+  ["dragenter", "dragover"].forEach((ev) =>
+    dropEl.addEventListener(ev, (e) => {
+      e.preventDefault();
+      dropEl.classList.add("dragging");
+    })
+  );
+  ["dragleave", "drop"].forEach((ev) =>
+    dropEl.addEventListener(ev, (e) => {
+      e.preventDefault();
+      dropEl.classList.remove("dragging");
+    })
+  );
+  dropEl.addEventListener("drop", (e) => {
+    e.stopPropagation();
+    const f = (e as DragEvent).dataTransfer?.files?.[0];
+    if (f) onFile(f);
+  });
 }
 
 export function buildSrSummary(
@@ -18,8 +98,12 @@ export function buildSrSummary(
 
   if (detection.type === "scatter") {
     const ptCount = datasets[0]?.data?.length ?? 0;
-    const xc = detection.yColumns[0]?.name ?? "X";
-    const yc = detection.yColumns[1]?.name ?? "Y";
+    const xc = detection.yColumns[0]
+      ? formatTitleWithUnit(detection.yColumns[0].name, detection.yColumns[0].unit)
+      : "X";
+    const yc = detection.yColumns[1]
+      ? formatTitleWithUnit(detection.yColumns[1].name, detection.yColumns[1].unit)
+      : "Y";
     return `${title}: scatter plot with ${ptCount} points comparing ${yc} against ${xc}.`;
   }
 
@@ -60,12 +144,12 @@ export function populateSrTable(
     const [xc, yc] = detection.yColumns;
     const thX = document.createElement("th");
     thX.scope = "col";
-    thX.textContent = xc.name;
+    thX.textContent = formatTitleWithUnit(xc.name, xc.unit);
     headerRow.appendChild(thX);
 
     const thY = document.createElement("th");
     thY.scope = "col";
-    thY.textContent = yc.name;
+    thY.textContent = formatTitleWithUnit(yc.name, yc.unit);
     headerRow.appendChild(thY);
 
     thead.appendChild(headerRow);

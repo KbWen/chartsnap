@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { createCanvas, loadImage } from "canvas";
@@ -11,10 +11,38 @@ import sampleLine from "../samples/monthly-sales.csv?raw";
 import sampleBar from "../samples/fruit-votes.csv?raw";
 import sampleScatter from "../samples/height-weight.csv?raw";
 
+const HERO_WEEKLY_COMMITS_CSV = [
+  "week,commits",
+  "2025-01-07,12",
+  "2025-01-14,8",
+  "2025-01-21,19",
+  "2025-01-28,23",
+  "2025-02-04,5",
+  "2025-02-11,0",
+  "2025-02-18,0",
+  "2025-02-25,14",
+  "2025-03-04,31",
+  "2025-03-11,26",
+  "2025-03-18,9",
+  "2025-03-25,17",
+  "2025-04-01,22",
+  "2025-04-08,6",
+  "2025-04-15,20",
+  "2025-04-22,28",
+].join("\n");
+
+const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
 describe("Generate Documentation Assets", () => {
-  it("renders theme showcase and hero image", async () => {
+  it("renders theme showcase and weekly-commits hero image with verified palette captions", async () => {
     const twitterPreset = PRESETS[0]; // 1200 x 675
-    
+
+    // 0. Hero Chart: Weekly commits with a two-week gap (matches README.md & SPEC.md)
+    const parsedHero = parseCsv(HERO_WEEKLY_COMMITS_CSV);
+    const detHero = detectChart(parsedHero);
+    const blobHero = await exportPng(parsedHero, detHero, "Commits per week", twitterPreset, THEMES.editorial);
+    const bufHero = Buffer.from(await blobHero.arrayBuffer());
+
     // 1. Editorial Line Chart
     const parsedLine = parseCsv(sampleLine);
     const detLine = detectChart(parsedLine);
@@ -32,11 +60,6 @@ describe("Generate Documentation Assets", () => {
     const detScatter = detectChart(parsedScatter);
     const blobNordic = await exportPng(parsedScatter, detScatter, "Height vs. Weight Distribution", twitterPreset, THEMES.nordic);
     const bufNordic = Buffer.from(await blobNordic.arrayBuffer());
-
-    const docsDir = path.resolve(__dirname, "../docs");
-
-    // Save hero.png as high quality Editorial line chart
-    fs.writeFileSync(path.join(docsDir, "hero.png"), bufEditorial);
 
     // 4. Compose a Balanced 3-column Theme Showcase Banner (themes-preview.png)
     const W = 2400;
@@ -70,7 +93,7 @@ describe("Generate Documentation Assets", () => {
         theme: THEMES.corporate,
         label: "CORPORATE SLATE",
         tagline: "Executive decks & boardroom reports",
-        colorsLabel: "Pure White #ffffff · Navy #0f4c81 · Slate #2f4161",
+        colorsLabel: "Pure White #ffffff · Navy #0f4c81 · Sky #0284c7",
         buf: bufCorporate,
         borderColor: "#d8e0e8",
       },
@@ -78,11 +101,24 @@ describe("Generate Documentation Assets", () => {
         theme: THEMES.nordic,
         label: "NORDIC MINIMAL",
         tagline: "Modern engineering & analytics tools",
-        colorsLabel: "Cool Stone #fafaf9 · Charcoal #18181b · Slate #334155",
+        colorsLabel: "Cool Stone #fafaf9 · Charcoal #18181b · Cobalt #2563eb",
         buf: bufNordic,
         borderColor: "#dcdce0",
       },
     ];
+
+    // Assert every hex in colorsLabel actually exists in that theme's bg or palette
+    for (const card of cards) {
+      const hexMatches = card.colorsLabel.match(/#[0-9a-fA-F]{6}/g) ?? [];
+      expect(hexMatches.length).toBeGreaterThanOrEqual(3);
+      const validHexes = new Set([
+        card.theme.bg.toLowerCase(),
+        ...card.theme.palette.map((c) => c.toLowerCase()),
+      ]);
+      for (const hex of hexMatches) {
+        expect(validHexes.has(hex.toLowerCase()), `${card.label} colorsLabel hex ${hex} must belong to theme ${card.theme.id}`).toBe(true);
+      }
+    }
 
     const cardW = 733;
     const cardH = 550;
@@ -132,6 +168,8 @@ describe("Generate Documentation Assets", () => {
 
       // Draw the rendered chart into the card
       const img = await loadImage(card.buf);
+      expect(img.width).toBe(twitterPreset.width);
+      expect(img.height).toBe(twitterPreset.height);
       const chartPadding = 20;
       const chartTargetX = x + chartPadding;
       const chartTargetY = y + 74;
@@ -147,6 +185,27 @@ describe("Generate Documentation Assets", () => {
     }
 
     const showcaseBuf = canvas.toBuffer("image/png");
-    fs.writeFileSync(path.join(docsDir, "themes-preview.png"), showcaseBuf);
+
+    // Verify all generated buffers have valid PNG headers and dimensions
+    for (const buf of [bufHero, bufEditorial, bufCorporate, bufNordic, showcaseBuf]) {
+      expect(buf.byteLength).toBeGreaterThan(10_000);
+      for (let i = 0; i < PNG_MAGIC.length; i++) {
+        expect(buf[i]).toBe(PNG_MAGIC[i]);
+      }
+    }
+    const heroImg = await loadImage(bufHero);
+    expect(heroImg.width).toBe(twitterPreset.width);
+    expect(heroImg.height).toBe(twitterPreset.height);
+
+    const showcaseImg = await loadImage(showcaseBuf);
+    expect(showcaseImg.width).toBe(W);
+    expect(showcaseImg.height).toBe(H);
+
+    // Only write to docs/ when explicitly requested via GENERATE_ASSETS=1
+    if (process.env.GENERATE_ASSETS === "1") {
+      const docsDir = path.resolve(__dirname, "../docs");
+      fs.writeFileSync(path.join(docsDir, "hero.png"), bufHero);
+      fs.writeFileSync(path.join(docsDir, "themes-preview.png"), showcaseBuf);
+    }
   });
 });

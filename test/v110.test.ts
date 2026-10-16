@@ -4,7 +4,7 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 import { parseCsv } from "../src/csv";
 import { detectChart } from "../src/detect";
-import { buildConfig } from "../src/chart";
+import { buildConfig, collectNotes } from "../src/chart";
 
 describe("v1.10: Currency, Percentage & Accounting Negatives", () => {
   it("parses currency values with leading symbols and extracts unit", () => {
@@ -73,13 +73,15 @@ describe("v1.10: Currency, Percentage & Accounting Negatives", () => {
     expect(yTitle).toBe("Revenue ($)");
   });
 
-  it("warns about conflicting units across multi-series columns", () => {
+  it("warns about conflicting units across multi-series columns without mutating parsed.notes", () => {
     const csv = "Date,Revenue,Margin\n2025-01,$1000,25%\n2025-02,$1200,28%";
     const parsed = parseCsv(csv);
+    Object.freeze(parsed.notes);
     const detection = detectChart(parsed);
     buildConfig(parsed, detection, { width: 1200, height: 675 });
 
-    expect(parsed.notes.some((n) => /mixed units|different units/i.test(n))).toBe(true);
+    const notes = collectNotes(parsed, detection);
+    expect(notes.some((n) => /mixed units|different units/i.test(n))).toBe(true);
   });
 });
 

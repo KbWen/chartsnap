@@ -17,10 +17,11 @@ import {
   Tooltip,
 } from "chart.js";
 import "./date-adapter";
+import { collectNotes, formatTitleWithUnit, mixedUnitsNote } from "./a11y";
 import { DEFAULT_THEME_ID, getTheme, listThemes, registerTheme, THEMES } from "./themes";
 import type { ChartTheme, Detection, ParsedCsv } from "./types";
 
-export { DEFAULT_THEME_ID, getTheme, listThemes, registerTheme, THEMES };
+export { collectNotes, DEFAULT_THEME_ID, formatTitleWithUnit, getTheme, listThemes, mixedUnitsNote, registerTheme, THEMES };
 
 // Register only what the three chart types need. `...registerables` would also pull in
 // pie/doughnut/radar/polarArea/bubble, the radial + logarithmic scales, Filler and
@@ -118,13 +119,6 @@ function num(n: number): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
-export function formatTitleWithUnit(name: string, unit?: string): string {
-  if (!unit || !name) return name;
-  const trimmed = name.trim();
-  if (trimmed.includes(unit)) return trimmed;
-  return `${trimmed} (${unit})`;
-}
-
 /**
  * The single source of truth for every render target (preview, PNG, SVG).
  * Builds a Chart.js config from the parsed CSV + detected chart type.
@@ -136,16 +130,6 @@ export function buildConfig(
 ): ChartConfiguration {
   const theme = opts.theme ?? getTheme();
   const palette = theme.palette;
-
-  const distinctUnits = Array.from(
-    new Set(detection.yColumns.map((c) => c.unit).filter((u): u is string => Boolean(u)))
-  );
-  if (distinctUnits.length > 1) {
-    const mixedNote = `Multi-series chart contains mixed units (${distinctUnits.join(", ")}) on the same axis — values may differ significantly in scale.`;
-    if (!parsed.notes.includes(mixedNote)) {
-      parsed.notes.push(mixedNote);
-    }
-  }
 
   // Geometry — padding, point radius, rule widths, bar caps — keeps the short-edge scale it
   // was tuned against, and looks right.

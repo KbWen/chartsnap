@@ -2,7 +2,13 @@ import "./style.css";
 import { Chart } from "chart.js";
 import { buildConfig } from "./chart";
 import { DEFAULT_THEME_ID, getTheme, listThemes } from "./themes";
-import { autoTitle, populateSrTable } from "./a11y";
+import {
+  bindDropzoneEvents,
+  collectNotes,
+  isTabularPaste,
+  populateSrTable,
+  resolveTitle,
+} from "./a11y";
 import { CsvError, decodeUtf8, parseCsv, scrub } from "./csv";
 import { DetectError, detectChart, feasibleTypes } from "./detect";
 import { downloadBlob, exportPng, exportSvg, PRESETS, renderSvgString, shareFile } from "./export";
@@ -42,6 +48,7 @@ interface State {
   parsed: ParsedCsv;
   detection: Detection;
   title: string;
+  sourceTitle?: string;
 }
 let state: State | null = null;
 let previewChart: Chart | null = null;
@@ -119,24 +126,17 @@ function syncToggle(parsed: ParsedCsv, activeType: ChartType): void {
   }
 }
 
-/** Parse warnings, plus any numeric column this chart type can't show. */
+/** Parse warnings, plus any numeric column or mixed-unit warning for this chart type. */
 function showNotes(parsed: ParsedCsv, detection: Detection): void {
-  const lines = [...parsed.notes];
-  const dropped = detection.droppedSeries;
-  if (dropped.length > 0) {
-    const shown = detection.yColumns.length;
-    lines.push(
-      `Charting ${shown} of ${shown + dropped.length} numeric columns — left out: ${dropped.join(", ")}.`
-    );
-  }
-  notesEl.textContent = lines.join("\n");
+  notesEl.textContent = collectNotes(parsed, detection).join("\n");
 }
 
 function render(parsed: ParsedCsv, sourceTitle?: string): void {
   // A new dataset always starts from a fresh auto-detection (the toggle re-syncs below).
   const detection = detectChart(parsed); // may throw DetectError
-  const title = sourceTitle?.trim() || parsed.extractedTitle || autoTitle(detection);
-  state = { parsed, detection, title };
+  const cleanSource = sourceTitle?.trim() || undefined;
+  const title = resolveTitle(detection, parsed, cleanSource);
+  state = { parsed, detection, title, sourceTitle: cleanSource };
 
   infoEl.textContent = detection.reason;
   showNotes(parsed, detection);
@@ -144,7 +144,7 @@ function render(parsed: ParsedCsv, sourceTitle?: string): void {
   clearStatus();
   renderPreview();
   syncToggle(parsed, detection.type);
-  resultEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  resultEl.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
 }
 
 /** Escape hatch: re-render the current data as an explicitly chosen chart type. */
@@ -152,7 +152,8 @@ function setChartType(type: ChartType): void {
   if (!state) return;
   try {
     const detection = detectChart(state.parsed, type);
-    state = { ...state, detection, title: autoTitle(detection) };
+    const title = resolveTitle(detection, state.parsed, state.sourceTitle);
+    state = { ...state, detection, title };
     infoEl.textContent = detection.reason;
     // Switching to scatter drops every series past the second — re-state what's left out.
     showNotes(state.parsed, detection);
@@ -265,32 +266,8 @@ fileInput.addEventListener("change", () => {
   fileInput.value = ""; // allow re-selecting the same file
 });
 
-// global drag & drop shield: prevent browser from navigating away on dropped files
-window.addEventListener("dragover", (e) => e.preventDefault());
-window.addEventListener("drop", (e) => {
-  e.preventDefault();
-  const f = (e as DragEvent).dataTransfer?.files?.[0];
-  if (f) handleFile(f);
-});
-
-// dropzone visual cue
-["dragenter", "dragover"].forEach((ev) =>
-  dropEl.addEventListener(ev, (e) => {
-    e.preventDefault();
-    dropEl.classList.add("dragging");
-  })
-);
-["dragleave", "drop"].forEach((ev) =>
-  dropEl.addEventListener(ev, (e) => {
-    e.preventDefault();
-    dropEl.classList.remove("dragging");
-  })
-);
-dropEl.addEventListener("drop", (e) => {
-  e.stopPropagation();
-  const f = (e as DragEvent).dataTransfer?.files?.[0];
-  if (f) handleFile(f);
-});
+// global drag & drop shield + dropzone visual cue and event deduplication
+bindDropzoneEvents(dropEl, window, handleFile);
 
 // paste: explicit textarea render
 pasteRender.addEventListener("click", () => {
@@ -302,9 +279,7 @@ pasteRender.addEventListener("click", () => {
 document.addEventListener("paste", (e) => {
   if (document.activeElement === pasteArea) return;
   const text = e.clipboardData?.getData("text");
-  const hasLinebreak = Boolean(text && (text.includes("\n") || text.includes("\r")));
-  const hasDelimiter = Boolean(text && (text.includes(",") || text.includes("\t") || text.includes(";")));
-  if (hasLinebreak && hasDelimiter) {
+  if (isTabularPaste(text)) {
     e.preventDefault();
     handleText(text!);
   }
@@ -321,7 +296,7 @@ for (const btn of document.querySelectorAll<HTMLButtonElement>("[data-sample]"))
     const sample = SAMPLES[btn.dataset.sample ?? ""];
     if (sample) {
       handleText(sample.csv, sample.title);
-      resultEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      resultEl.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
     }
   });
 }

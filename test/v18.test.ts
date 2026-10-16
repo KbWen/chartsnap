@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
+import { isTabularPaste } from "../src/a11y";
 import { parseCsv } from "../src/csv";
 import { detectChart } from "../src/detect";
 
@@ -41,12 +42,6 @@ describe("v1.8: Spreadsheet Clipboard Paste (TSV / Semicolon / Excel newlines)",
   });
 
   it("page-level paste predicate strictly requires newlines and delimiters to avoid destroying existing charts", () => {
-    const isTabularPaste = (text: string): boolean => {
-      const hasLinebreak = text.includes("\n") || text.includes("\r");
-      const hasDelimiter = text.includes(",") || text.includes("\t") || text.includes(";");
-      return Boolean(hasLinebreak && hasDelimiter);
-    };
-
     // Valid tabular pastes that SHOULD trigger
     expect(isTabularPaste("a,b\n1,2")).toBe(true);
     expect(isTabularPaste("a\tb\n1\t2")).toBe(true);
@@ -57,6 +52,8 @@ describe("v1.8: Spreadsheet Clipboard Paste (TSV / Semicolon / Excel newlines)",
     expect(isTabularPaste("Wait; check this link")).toBe(false);
     expect(isTabularPaste("Just some text without delimiters\nsecond line")).toBe(false);
     expect(isTabularPaste("")).toBe(false);
+    expect(isTabularPaste(null)).toBe(false);
+    expect(isTabularPaste(undefined)).toBe(false);
   });
 });
 
