@@ -137,18 +137,22 @@ describe("v1.10.2 Audit Remediations", () => {
       const detLine = detectChart(parsedWithTitle, "line");
       const detScatter = detectChart(parsedWithTitle, "scatter");
 
-      // File / chip title takes priority across all overrides
-      expect(resolveTitle(detBar, parsedWithTitle, "monthly-sales")).toBe("monthly-sales");
-      expect(resolveTitle(detLine, parsedWithTitle, "monthly-sales")).toBe("monthly-sales");
-      expect(resolveTitle(detScatter, parsedWithTitle, "monthly-sales")).toBe("monthly-sales");
+      // In-sheet extractedTitle takes priority even over sourceTitle (file/chip) across all overrides
+      expect(resolveTitle(detBar, parsedWithTitle, "monthly-sales")).toBe("Q1 Board Report");
+      expect(resolveTitle(detLine, parsedWithTitle, "monthly-sales")).toBe("Q1 Board Report");
+      expect(resolveTitle(detScatter, parsedWithTitle, "monthly-sales")).toBe("Q1 Board Report");
 
-      // Extracted title takes second priority across all overrides
+      // Extracted title takes priority across all overrides when sourceTitle is undefined
       expect(resolveTitle(detBar, parsedWithTitle, undefined)).toBe("Q1 Board Report");
       expect(resolveTitle(detLine, parsedWithTitle, undefined)).toBe("Q1 Board Report");
       expect(resolveTitle(detScatter, parsedWithTitle, undefined)).toBe("Q1 Board Report");
 
-      // Only when both sourceTitle and extractedTitle are absent does autoTitle take over
+      // When extractedTitle is absent, sourceTitle takes priority
       const parsedNoTitle = parseCsv("Category,Sales,Profit\nA,10,2\nB,20,5");
+      expect(resolveTitle(detectChart(parsedNoTitle, "bar"), parsedNoTitle, "monthly-sales")).toBe("monthly-sales");
+      expect(resolveTitle(detectChart(parsedNoTitle, "scatter"), parsedNoTitle, "monthly-sales")).toBe("monthly-sales");
+
+      // Only when both sourceTitle and extractedTitle are absent does autoTitle take over
       expect(resolveTitle(detectChart(parsedNoTitle, "bar"), parsedNoTitle, undefined)).toBe("Sales, Profit by Category");
       expect(resolveTitle(detectChart(parsedNoTitle, "scatter"), parsedNoTitle, undefined)).toBe("Profit vs Sales");
     });

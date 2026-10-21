@@ -615,6 +615,37 @@ Remediates all P0/P1/P2 defects uncovered and verified by executed runs in the 2
       - Gate disk writes in `test/generate-assets.test.ts` behind `process.env.GENERATE_ASSETS === "1"` (while adding real `expect()` assertions on the rendered PNG buffers and palette hex captions during tests), restore `docs/hero.png` to the weekly commits dataset described by `README.md:11` and `SPEC.md:282`, and fix the palette hex captions in `docs/themes-preview.png` to match `THEMES.corporate.palette` and `THEMES.nordic.palette`.
       - **Must keep working:** All 468 tests across 22 suites pass; `npm run build` succeeds; PNG and SVG exports remain byte-deterministic; zero CSP violations.
 
+## v1.11 — multi-persona real-world resilience (shipped 2026-10-21)
+
+Addresses the 6 persona-driven gaps uncovered by executed runs across European analysts, data analysts with missing values, Excel pivot/report exporters, zh-TW business users, and keyboard/screen-reader users:
+
+### Done criteria (v1.11)
+
+- [x] **Trailing currency symbols & CJK monetary suffixes in `cleanNumberString` (`src/csv.ts`).**
+      - Expand `UNIT_SUFFIX` to recognize trailing currencies (`€`, `EUR`, `£`, `GBP`, `¥`, `JPY`, `RMB`, `NT$`, `NTD`, `NT`, `US$`, `USD`, `$`) and CJK currency/magnitude units (`億元`, `萬元`, `千元`, `元`) in addition to `%`, including inside or alongside accounting negatives (`-120 €`, `(80 €)`, `50萬元`).
+      - When a single column mixes distinct CJK magnitude units (e.g. `50萬元` and `800千元` in the same column), emit a note warning that mixed units in the column were read at face value.
+      - **Must keep working:** Stock ticker guard (`$AAPL`, `$(AAPL)`), ordinary prefixes (`$100`, `NT$500`), and double-sign rejections (`--500`, `(-500)`) remain intact.
+
+- [x] **Title-row vs. partially-blank header disambiguation across EU decimals, `N/A` cells, and year-column pivot headers (`src/csv.ts`).**
+      - When `rows[0]` has multiple cells (`rows[0].length > 1`) and 1 non-empty cell at column 0:
+        1. Reject title extraction if any cell in `rows[1]` is a missing-value placeholder (`isMissingValue(c)`, e.g. `N/A`, `-`, `null`, `""`) — so `"item,\nApples,N/A\nPears,45"` preserves `["item", "Column 2"]` and all 3 data rows.
+        2. Check both `"us"` and `"eu"` number parsing (`!Number.isNaN(toNumber(c, "us")) || !Number.isNaN(toNumber(c, "eu"))`) when testing whether `rows[1]` contains data numbers — so `"item;\nApples;12,5\nPears;15,2"` preserves `["item", "Column 2"]` and all data rows.
+        3. Allow `rows[1]` to be recognized as a pivot header row when `rows[1].length >= 3`, all cells in `rows[1]` are non-missing, `rows[1][0]` is non-numeric text, and the remaining cells in `rows[1]` are bare 4-digit years (`1900–2099`) while `rows[2]` contains data — so `"2025 Regional Sales,,,\nRegion,2023,2024,2025\nNorth,100,120,150\nSouth,80,90,110"` extracts `extractedTitle: "2025 Regional Sales"` and uses `["Region", "2023", "2024", "2025"]` as headers.
+      - **Must keep working:** `",votes\nApples,30..."`, `"item,\nApples,30..."`, `"Annual Sales Report 2025\nYear,Revenue..."`, and `"Annual Sales Report 2025,\nYear,Revenue..."` all continue to pass.
+
+- [x] **In-sheet `extractedTitle` takes priority over generic filename when present (`src/a11y.ts`).**
+      - Update `resolveTitle(detection, parsed, sourceTitle)` so an explicit single-cell report title extracted from row 0 of the CSV (`parsed.extractedTitle`) takes priority over `sourceTitle` (the filename `Book1` / `export`), while `sourceTitle` still beats `autoTitle(detection)` whenever the CSV has no `extractedTitle`.
+      - **Must keep working:** Sample chips (`Monthly sales`, `Fruit votes`, `Height vs weight`), normal file uploads without a title row (`q3_quarterly_report.csv`), and chart-type overrides (`setChartType`) keep their expected titles.
+
+- [x] **`YEAR_HEADER` precision across Chinese and English (`src/csv.ts`).**
+      - Replace the bare substring `/年/` and loose English `YEAR_HEADER` match with `isYearHeader(name)` so metric columns that happen to contain `年` or `year` (`去年營收`, `今年營收`, `明年預估`, `年營收`, `年終獎金`, `年齡`, `年資`, `年增率`, `last_year_revenue`, `this_year_sales`, `year_end_bonus`, `3-yr-avg`, `Year over Year %`, `last_year`, `this year`) are NOT classified as bare-year date axes when their values happen to sit in `1900–2099`.
+      - **Must keep working:** `year`, `Year`, `yr`, `years`, `fiscal_year`, `calendar year`, `birth_year`, `model-year`, `Year (AD)`, `年`, `年份`, `年度`, `年份(西元)`, `年度別`, `會計年度`, `會計年度 2025`, `年_2025`, `西元年`, and `出生年` all still classify bare 4-digit `1900–2099` values as a year-ticked date axis.
+
+- [x] **Clean state reset on error & keyboard focus retention in `withBusy` (`src/main.ts`, `src/a11y.ts`).**
+      - In `handleText` (`src/main.ts`), reset `state = null` when catching a parse/detect error so no stale chart state lingers while `#result` is hidden.
+      - Extract/update `withBusy` so it sets `aria-busy="true"` during execution, clears `aria-busy` in `finally`, and restores `.focus()` to the button if it was the `document.activeElement` before being disabled.
+      - **Must keep working:** All 468 existing tests pass (+19 v1.11 tests, 487 total across 23 suites); `npm run build` succeeds; PNG and SVG exports remain byte-deterministic; zero CSP violations.
+
 ## Non-goals / Later / Not now
 
 - NO field/axis mapping or chart-type gallery UI (that is RAWGraphs' turf — we lose if we

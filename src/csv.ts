@@ -60,7 +60,7 @@ export function isMissingValue(s: string): boolean {
 
 const ACCOUNTING_NEG = /^\((.+)\)$/;
 const CURRENCY_PREFIX = /^(?:\$|NT\$|NTD|NT|US\$|USD|€|EUR|£|GBP|¥|JPY|RMB)\s*/i;
-const UNIT_SUFFIX = /\s*(?:%|元|NTD|USD)$/i;
+const UNIT_SUFFIX = /\s*(?:%|億元|萬元|千元|元|NT\$|NTD|NT|US\$|USD|€|EUR|£|GBP|¥|JPY|RMB|\$)$/i;
 
 export interface CleanedNumber {
   cleaned: string;
@@ -118,6 +118,16 @@ export function cleanNumberString(s: string): CleanedNumber {
     t = t.slice(0, t.length - suffixMatch[0].length).trim();
   }
 
+  // 6. Check accounting parentheses if suffix was outside: (80) €
+  if (!hasOuterSign) {
+    const parenAfterSuffix = ACCOUNTING_NEG.exec(t);
+    if (parenAfterSuffix) {
+      t = parenAfterSuffix[1].trim();
+      isNegative = true;
+      hasOuterSign = true;
+    }
+  }
+
   // Reject double signs (e.g. "--500", "+-500", "-+500", "(-500)")
   if (hasOuterSign && (t.startsWith("-") || t.startsWith("+"))) {
     return { cleaned: s };
@@ -145,6 +155,7 @@ interface NumberStyle {
   /** "ambiguous": the sample's magnitude rests on an inference. "mixed": the column self-contradicts. */
   warn?: { kind: "ambiguous" | "mixed"; sample: string };
   unit?: string;
+  mixedUnits?: string[];
 }
 
 /**
@@ -207,20 +218,23 @@ function detectNumberStyle(raw: string[]): NumberStyle {
     }
   }
 
+  const distinctUnits = [...unitCounts.keys()];
+  const mixedUnits = distinctUnits.length > 1 ? distinctUnits : undefined;
+
   const eu = dotGrouping ?? commaDecimal;
   const us = dotDecimal ?? commaGrouping;
-  if (eu && us) return { format: "us", warn: { kind: "mixed", sample: eu }, unit: dominantUnit };
+  if (eu && us) return { format: "us", warn: { kind: "mixed", sample: eu }, unit: dominantUnit, mixedUnits };
 
   const format: NumberFormat = eu ? "eu" : "us";
 
   // "3.850" is worth a note unless something proved the dot groups: otherwise its
   // magnitude hangs on an inference, and being wrong scales it by 1000.
-  if (dotTriple && !dotGrouping) return { format, warn: { kind: "ambiguous", sample: dotTriple }, unit: dominantUnit };
+  if (dotTriple && !dotGrouping) return { format, warn: { kind: "ambiguous", sample: dotTriple }, unit: dominantUnit, mixedUnits };
   // "2,500" only earns a note once a comma is proven to be a decimal point somewhere —
   // on its own it is ordinary US thousands, and a comma with three decimals is rare.
-  if (commaTriple && commaDecimal) return { format, warn: { kind: "ambiguous", sample: commaTriple }, unit: dominantUnit };
+  if (commaTriple && commaDecimal) return { format, warn: { kind: "ambiguous", sample: commaTriple }, unit: dominantUnit, mixedUnits };
 
-  return { format, unit: dominantUnit };
+  return { format, unit: dominantUnit, mixedUnits };
 }
 
 /**
@@ -297,7 +311,14 @@ const PARSEABLE: RegExp[] = [
  * `count` column of 2000, 2010, 2020 turns into a time axis, and 1898 charts differently
  * from 2018 purely because it falls outside the plausible-year window.
  */
-const YEAR_HEADER = /(^|[^a-z])(year|yr|years)([^a-z]|$)|年/i;
+const YEAR_EN =
+  /^(?!.*(?:^|[^a-z])(?:over|vs|versus|per|to)(?:[^a-z]|$))(?!(?:last|this|next|prior|prev|previous|past)(?:[^a-z]|$))(?:.*[_\s-])?(?:year|yr|years)(?:\s*\([^)]*\)|\s*[_-]?\d+)?$/i;
+const YEAR_ZH =
+  /^(?!.*(?:去年|今年|明年|前年|歷年|全年|半年))[\u4e00-\u9fffA-Za-z0-9_\s-]*?年(?:份|度(?:別)?)?(?:\s*[\(（][^\)）]*[\)）]|\s*[_-]?\d+)?$/;
+export function isYearHeader(name: string): boolean {
+  const t = name.trim();
+  return YEAR_EN.test(t) || YEAR_ZH.test(t);
+}
 
 function cleanTime(s: string, bareYearOk: boolean): number {
   const t = s.trim();
@@ -339,7 +360,7 @@ function classify(
   unit?: string;
 } {
   const style = detectNumberStyle(raw);
-  const bareYearOk = YEAR_HEADER.test(name);
+  const bareYearOk = isYearHeader(name);
   const nums = raw.map((v) => toNumber(v, style.format));
   const times = raw.map((v) => cleanTime(v, bareYearOk));
   const nonEmpty = raw.filter((v) => !isMissingValue(v)).length;
@@ -456,8 +477,21 @@ export function parseCsv(text: string): ParsedCsv {
   const row0Cells = rows[0].filter((c) => c.trim() !== "");
   const row0FirstCell = (rows[0][0] ?? "").trim();
   const row1NonEmpty = rows[1].filter((c) => c.trim() !== "");
-  const row1LooksLikeHeader =
-    rows[0].length === 1 || row1NonEmpty.every((c) => Number.isNaN(toNumber(c, "us")));
+
+  const isNumericCell = (c: string) =>
+    !Number.isNaN(toNumber(c, "us")) || !Number.isNaN(toNumber(c, "eu"));
+
+  let row1LooksLikeHeader = false;
+  if (rows[0].length === 1) {
+    row1LooksLikeHeader = true;
+  } else if (rows[1].every((c) => !isMissingValue(c))) {
+    const allNonNumeric = row1NonEmpty.every((c) => !isNumericCell(c));
+    const isPivotYearHeader =
+      rows[1].length >= 3 &&
+      !isNumericCell(rows[1][0]) &&
+      rows[1].slice(1).every((c) => /^(?:19|20)\d{2}$/.test(c.trim()));
+    row1LooksLikeHeader = allNonNumeric || isPivotYearHeader;
+  }
   if (
     rows.length >= 3 &&
     row0Cells.length === 1 &&
@@ -498,6 +532,11 @@ export function parseCsv(text: string): ParsedCsv {
     if (worthSaying) {
       const warning = numberWarning(name, style);
       if (warning) notes.push(warning);
+    }
+    if (type === "number" && style.mixedUnits && style.mixedUnits.length > 1) {
+      notes.push(
+        `Column “${name}” mixes units (${style.mixedUnits.join(", ")}) — read at face value.`
+      );
     }
     // A date column that fell to text has no other way to announce itself.
     if (type === "category") {

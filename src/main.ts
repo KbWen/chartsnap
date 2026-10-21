@@ -8,6 +8,7 @@ import {
   isTabularPaste,
   populateSrTable,
   resolveTitle,
+  withBusy,
 } from "./a11y";
 import { CsvError, decodeUtf8, parseCsv, scrub } from "./csv";
 import { DetectError, detectChart, feasibleTypes } from "./detect";
@@ -226,6 +227,7 @@ function handleText(text: string, sourceTitle?: string, extraNotes: string[] = [
     parsed.notes.unshift(...extraNotes);
     render(parsed, sourceTitle);
   } catch (err) {
+    state = null;
     if (err instanceof CsvError || err instanceof DetectError) {
       showStatus(err.message, "error");
     } else {
@@ -304,45 +306,39 @@ for (const btn of document.querySelectorAll<HTMLButtonElement>("[data-sample]"))
 // ---- export -------------------------------------------------------------
 presetSelect.addEventListener("change", renderPreview);
 
-function withBusy(btn: HTMLButtonElement, label: string, fn: () => Promise<void> | void) {
-  return async () => {
-    const prev = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = label;
-    try {
-      await fn();
-    } catch (err) {
-      showStatus(`Export failed: ${(err as Error).message}`, "error");
-    } finally {
-      btn.disabled = false;
-      btn.textContent = prev;
-    }
-  };
-}
-
 dlPng.addEventListener(
   "click",
-  withBusy(dlPng, "Rendering…", async () => {
-    if (!state) return;
-    const preset = currentPreset();
-    const blob = await exportPng(state.parsed, state.detection, state.title, preset, currentTheme());
-    const name = `chartsnap-${preset.id}.png`;
-    // On a phone the share sheet is the only route to the camera roll, and the camera roll is
-    // the only route into Instagram. Only "unavailable" falls back to a download — dismissing
-    // the sheet is an answer, and downloading anyway would be the file-in-Files dead end this
-    // exists to remove, delivered against the user's stated wish.
-    if ((await shareFile(blob, name)) === "unavailable") downloadBlob(blob, name);
-  })
+  withBusy(
+    dlPng,
+    "Rendering…",
+    async () => {
+      if (!state) return;
+      const preset = currentPreset();
+      const blob = await exportPng(state.parsed, state.detection, state.title, preset, currentTheme());
+      const name = `chartsnap-${preset.id}.png`;
+      // On a phone the share sheet is the only route to the camera roll, and the camera roll is
+      // the only route into Instagram. Only "unavailable" falls back to a download — dismissing
+      // the sheet is an answer, and downloading anyway would be the file-in-Files dead end this
+      // exists to remove, delivered against the user's stated wish.
+      if ((await shareFile(blob, name)) === "unavailable") downloadBlob(blob, name);
+    },
+    (err) => showStatus(`Export failed: ${err.message}`, "error")
+  )
 );
 
 dlSvg.addEventListener(
   "click",
-  withBusy(dlSvg, "Rendering…", () => {
-    if (!state) return;
-    const preset = currentPreset();
-    const blob = exportSvg(state.parsed, state.detection, state.title, preset, currentTheme());
-    downloadBlob(blob, `chartsnap-${preset.id}.svg`);
-  })
+  withBusy(
+    dlSvg,
+    "Rendering…",
+    () => {
+      if (!state) return;
+      const preset = currentPreset();
+      const blob = exportSvg(state.parsed, state.detection, state.title, preset, currentTheme());
+      downloadBlob(blob, `chartsnap-${preset.id}.svg`);
+    },
+    (err) => showStatus(`Export failed: ${err.message}`, "error")
+  )
 );
 
 // ---- offline ------------------------------------------------------------

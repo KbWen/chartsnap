@@ -117,7 +117,7 @@ Vite and vanilla TypeScript, [Chart.js](https://www.chartjs.org/) for drawing,
 [canvas2svg](https://github.com/gliffy/canvas2svg) for the vector export. No backend;
 it ships as static files to GitHub Pages. Zero analytics, zero cookies, zero third-party scripts.
 
-`npm test` runs 468 tests across 22 suites, covering column auto-detection, time-axis
+`npm test` runs 487 tests across 23 suites, covering column auto-detection, time-axis
 synchronization, responsive SVG serialization, CVD & WCAG contrast tripwires,
 negative controls, zero-trust prototype pollution defense, and multi-target PNG exports.
 

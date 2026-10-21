@@ -22,7 +22,7 @@ export function autoTitle(d: Detection): string {
 }
 
 export function resolveTitle(detection: Detection, parsed: ParsedCsv, sourceTitle?: string): string {
-  return sourceTitle?.trim() || parsed.extractedTitle || autoTitle(detection);
+  return parsed.extractedTitle || sourceTitle?.trim() || autoTitle(detection);
 }
 
 export function mixedUnitsNote(detection: Detection): string | null {
@@ -248,4 +248,33 @@ export function populateSrTable(
     tbody.appendChild(tr);
   }
   tableEl.appendChild(tbody);
+}
+
+export function withBusy(
+  btn: HTMLButtonElement,
+  label: string,
+  fn: () => Promise<void> | void,
+  onError?: (err: Error) => void
+): () => Promise<void> {
+  return async () => {
+    const prev = btn.textContent;
+    const hadFocus = typeof document !== "undefined" && document.activeElement === btn;
+    btn.disabled = true;
+    btn.setAttribute("aria-busy", "true");
+    btn.textContent = label;
+    try {
+      await fn();
+    } catch (err) {
+      if (onError) {
+        onError(err as Error);
+      }
+    } finally {
+      btn.disabled = false;
+      btn.removeAttribute("aria-busy");
+      btn.textContent = prev;
+      if (hadFocus) {
+        btn.focus();
+      }
+    }
+  };
 }
