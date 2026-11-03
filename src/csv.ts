@@ -16,7 +16,7 @@ export class CsvError extends Error {}
  */
 export function decodeUtf8(buffer: ArrayBuffer): { text: string; looksNonUtf8: boolean } {
   const text = new TextDecoder("utf-8", { fatal: false }).decode(buffer);
-  // Counted in a loop rather than via text.match(/�/g), which would allocate one
+  // Counted in a loop rather than via text.match(/\ufffd/g), which would allocate one
   // string per hit — a mis-encoded multi-MB file is almost all replacement chars.
   let repl = 0;
   let valid = 0;
@@ -48,6 +48,9 @@ const NUMERIC_SHAPE = /^[+-]?\d[\d.,]*$/;
 /** Digits, separators and scientific notation. */
 const VALID_NUM_RE = /^[+-]?\d[\d.,]*(?:e[+-]?\d+)?$/i;
 
+/** Single comma decimal before scientific-notation exponent (e.g. "1,5e6"). */
+const EU_SCI_RE = /^[+-]?\d+,\d+e[+-]?\d+$/i;
+
 /** A 1–3 digit lead, one separator, exactly three digits: "3.850", "2,500". */
 const GROUPED = /^[+-]?[1-9]\d{0,2}[.,]\d{3}$/;
 
@@ -59,8 +62,29 @@ export function isMissingValue(s: string): boolean {
 }
 
 const ACCOUNTING_NEG = /^\((.+)\)$/;
-const CURRENCY_PREFIX = /^(?:\$|NT\$|NTD|NT|US\$|USD|€|EUR|£|GBP|¥|JPY|RMB)\s*/i;
-const UNIT_SUFFIX = /\s*(?:%|億元|萬元|千元|元|NT\$|NTD|NT|US\$|USD|€|EUR|£|GBP|¥|JPY|RMB|\$)$/i;
+const CURRENCY_PREFIX =
+  /^(?:NT\$|NTD|NT|US\$|USD|HK\$|HKD|NZ\$|NZD|S\$|SGD|A\$|AUD|C\$|CAD|CHF|KRW|INR|\$|€|EUR|£|GBP|¥|JPY|RMB|₩|₹)\s*/i;
+const UNIT_SUFFIX =
+  /\s*(?:%|億元|億|萬元|萬|千元|千|元|NT\$|NTD|NT|US\$|USD|HK\$|HKD|NZ\$|NZD|S\$|SGD|A\$|AUD|C\$|CAD|CHF|KRW|INR|€|EUR|£|GBP|¥|JPY|RMB|₩|₹|\$)$/i;
+
+const CJK_MAGNITUDE_RE = /(億元|億|萬元|萬|千元|千|元)$/;
+const CJK_MAGNITUDES: Record<string, number> = {
+  億元: 1e8,
+  億: 1e8,
+  萬元: 1e4,
+  萬: 1e4,
+  千元: 1e3,
+  千: 1e3,
+  元: 1,
+};
+
+function parseCjkMagnitudeUnit(unit: string): { prefix: string; factor: number } | null {
+  const m = CJK_MAGNITUDE_RE.exec(unit);
+  if (!m) return null;
+  const mag = m[1];
+  const prefix = unit.slice(0, unit.length - mag.length).trim().toUpperCase();
+  return { prefix, factor: CJK_MAGNITUDES[mag] };
+}
 
 export interface CleanedNumber {
   cleaned: string;
@@ -94,12 +118,12 @@ export function cleanNumberString(s: string): CleanedNumber {
     t = t.slice(1).trim();
   }
 
-  let unit: string | undefined;
+  let prefixUnit: string | undefined;
 
   // 3. Extract currency prefix: $500 or $(500) or NTD 1,200
   const prefixMatch = CURRENCY_PREFIX.exec(t);
   if (prefixMatch) {
-    unit = prefixMatch[0].trim();
+    prefixUnit = prefixMatch[0].trim();
     t = t.slice(prefixMatch[0].length).trim();
   }
 
@@ -112,9 +136,10 @@ export function cleanNumberString(s: string): CleanedNumber {
   }
 
   // 5. Check trailing unit: % or 元 or NTD
+  let suffixUnit: string | undefined;
   const suffixMatch = UNIT_SUFFIX.exec(t);
   if (suffixMatch) {
-    unit ??= suffixMatch[0].trim();
+    suffixUnit = suffixMatch[0].trim();
     t = t.slice(0, t.length - suffixMatch[0].length).trim();
   }
 
@@ -145,6 +170,14 @@ export function cleanNumberString(s: string): CleanedNumber {
   }
   if (isNegative && !t.startsWith("-")) {
     t = `-${t}`;
+  }
+
+  let unit: string | undefined;
+  if (prefixUnit && suffixUnit) {
+    // Preserve CJK magnitude suffix when paired with a currency prefix (e.g. "NT$ 50萬元").
+    unit = CJK_MAGNITUDE_RE.test(suffixUnit) ? `${prefixUnit}${suffixUnit}` : prefixUnit;
+  } else {
+    unit = prefixUnit ?? suffixUnit;
   }
 
   return { cleaned: t, unit };
@@ -180,8 +213,13 @@ function detectNumberStyle(raw: string[]): NumberStyle {
 
   for (const cell of raw) {
     const { cleaned, unit } = cleanNumberString(cell);
-    if (!cleaned || !NUMERIC_SHAPE.test(cleaned)) continue;
+    if (!cleaned || !VALID_NUM_RE.test(cleaned)) continue;
     if (unit) unitCounts.set(unit, (unitCounts.get(unit) ?? 0) + 1);
+    if (EU_SCI_RE.test(cleaned)) {
+      commaDecimal ??= cleaned;
+      continue;
+    }
+    if (!NUMERIC_SHAPE.test(cleaned)) continue;
 
     const t = cleaned;
     const dots = t.split(".").length - 1;
@@ -271,6 +309,27 @@ function numberWarning(column: string, style: NumberStyle): string | null {
 /** "2019", "2025-01", "2025-01-05" — a calendar date carrying no time and no offset. */
 const CALENDAR_DATE = /^(\d{4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?$/;
 
+/** "2025.01.05" — 3-segment year-first dot date (2-segment "2025.01" is excluded so decimal prices stay numeric). */
+const DOT_DATE = /^(\d{4})\.(\d{1,2})\.(\d{1,2})$/;
+
+/** Explicit quarter labels: "2025-Q1", "2025 Q1", "2025/Q1", "Q1 2025". */
+const QUARTER_YEAR_FIRST = /^(\d{4})\s*[-/. ]?\s*Q([1-4])$/i;
+const QUARTER_Q_FIRST = /^Q([1-4])\s*[-/. ]?\s*(\d{4})$/i;
+
+function parseQuarter(t: string): { year: number; quarter: number } | null {
+  const m1 = QUARTER_YEAR_FIRST.exec(t);
+  if (m1) {
+    const year = Number(m1[1]);
+    if (year >= 1900 && year <= 2099) return { year, quarter: Number(m1[2]) };
+  }
+  const m2 = QUARTER_Q_FIRST.exec(t);
+  if (m2) {
+    const year = Number(m2[2]);
+    if (year >= 1900 && year <= 2099) return { year, quarter: Number(m2[1]) };
+  }
+  return null;
+}
+
 const MONTH_NAME =
   "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t)?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?";
 
@@ -340,6 +399,22 @@ function cleanTime(s: string, bareYearOk: boolean): number {
     return valid ? +d : NaN;
   }
 
+  const dot = DOT_DATE.exec(t);
+  if (dot) {
+    const year = Number(dot[1]);
+    if (year < 1900 || year > 2099) return NaN;
+    const month = Number(dot[2]) - 1;
+    const day = Number(dot[3]);
+    const d = new Date(year, month, day);
+    const valid = d.getFullYear() === year && d.getMonth() === month && d.getDate() === day;
+    return valid ? +d : NaN;
+  }
+
+  const q = parseQuarter(t);
+  if (q) {
+    return +new Date(q.year, (q.quarter - 1) * 3, 1);
+  }
+
   // Don't let bare numbers (counts, ids) masquerade as dates.
   if (/^-?\d+(\.\d+)?$/.test(t)) return NaN;
   // Everything else must look like something we recognise before Date.parse may guess at it.
@@ -357,18 +432,51 @@ function classify(
   times: number[];
   style: NumberStyle;
   bareYears: boolean;
+  quarterAxis: boolean;
   unit?: string;
+  normalizedUnit?: string;
 } {
   const style = detectNumberStyle(raw);
   const bareYearOk = isYearHeader(name);
-  const nums = raw.map((v) => toNumber(v, style.format));
+  const cellClean = raw.map((v) => cleanNumberString(v));
+  let nums = raw.map((v) => toNumber(v, style.format));
   const times = raw.map((v) => cleanTime(v, bareYearOk));
   const nonEmpty = raw.filter((v) => !isMissingValue(v)).length;
   // Only a column made *entirely* of bare years earns a year-ticked axis.
   const bareYears =
     bareYearOk && nonEmpty > 0 && raw.every((v) => isMissingValue(v) || /^\d{4}$/.test(v.trim()));
+  const quarterAxis =
+    nonEmpty > 0 && raw.every((v) => isMissingValue(v) || parseQuarter(v.trim()) !== null);
 
-  const base = { nums, times, style, bareYears, unit: style.unit };
+  let unit = style.unit;
+  let normalizedUnit: string | undefined;
+  if (style.mixedUnits && style.mixedUnits.length > 1 && style.unit) {
+    const parsedMags = style.mixedUnits.map((u) => ({ u, info: parseCjkMagnitudeUnit(u) }));
+    const targetInfo = parseCjkMagnitudeUnit(style.unit);
+    const samePrefix =
+      targetInfo !== null &&
+      parsedMags.every((p) => p.info !== null && p.info.prefix === targetInfo.prefix);
+    const hasAmbiguousUnitlessNonZero = nums.some(
+      (n, idx) => !Number.isNaN(n) && n !== 0 && !cellClean[idx].unit
+    );
+    if (samePrefix && targetInfo && !hasAmbiguousUnitlessNonZero) {
+      nums = nums.map((n, idx) => {
+        if (Number.isNaN(n) || n === 0) return n;
+        const cellUnit = cellClean[idx].unit;
+        const cellInfo = cellUnit ? parseCjkMagnitudeUnit(cellUnit) : null;
+        if (!cellInfo) return n;
+        const scaled = (n * cellInfo.factor) / targetInfo.factor;
+        return Number(scaled.toPrecision(12));
+      });
+      normalizedUnit = style.unit;
+    } else {
+      // Incommensurable mixed units (e.g. "$100" and "€80"): keep face value and clear unit
+      // so the exported axis never falsely attributes every bar/point to one currency.
+      unit = undefined;
+    }
+  }
+
+  const base = { nums, times, style, bareYears, quarterAxis, unit, normalizedUnit };
   if (nonEmpty === 0) return { type: "empty", ...base };
 
   const numHits = nums.filter((n) => !Number.isNaN(n)).length;
@@ -423,6 +531,10 @@ function unreadDateNote(column: string, raw: string[]): string | null {
   if (refused.length / cells.length < TYPE_THRESHOLD) return null;
   return `“${column}” looks like dates in a format that could be read more than one way (e.g. “${refused[0]}”), so it's charted as plain text rather than guessed at. Re-save it as YYYY-MM-DD for a time axis.`;
 }
+
+/** Exact summary/footer row labels at the bottom of spreadsheet exports. */
+const SUMMARY_LABEL_RE =
+  /^(?:total|totals|grand\s+total|sub[-\s]?total|sum|average|avg|mean|合計|總計|小計|總額|總數|平均)$/i;
 
 /** A line that carried no fields at all — a truly blank line, not a row of blank cells. */
 const isBlankLine = (row: string[]): boolean => row.length <= 1 && !(row[0] ?? "").trim();
@@ -514,6 +626,31 @@ export function parseCsv(text: string): ParsedCsv {
     return row;
   });
 
+  // Peel trailing summary/footer rows (e.g. "Total", "Average", "合計") when at least 2 data
+  // rows remain above them, so a summary footer neither dwarfs the y-axis nor breaks date
+  // classification (e.g. 3 dates + "Total" = 75% < 80% threshold).
+  const excludedSummaries: string[] = [];
+  while (body.length >= 3 && width >= 2) {
+    const last = body[body.length - 1];
+    const label = (last[0] ?? "").trim();
+    const rest = last.slice(1);
+    const hasNumeric = rest.some((c) => isNumericCell(c));
+    const allRestNumericOrMissing = rest.every((c) => isMissingValue(c) || isNumericCell(c));
+    if (SUMMARY_LABEL_RE.test(label) && hasNumeric && allRestNumericOrMissing) {
+      excludedSummaries.unshift(label);
+      body.pop();
+    } else {
+      break;
+    }
+  }
+  if (excludedSummaries.length === 1) {
+    notes.push(`Excluded summary row “${excludedSummaries[0]}” so it doesn't distort the scale.`);
+  } else if (excludedSummaries.length > 1) {
+    notes.push(
+      `Excluded summary rows (${excludedSummaries.map((s) => `“${s}”`).join(", ")}) so they don't distort the scale.`
+    );
+  }
+
   const originalRowCount = body.length;
   let sampled = false;
   if (body.length > MAX_POINTS) {
@@ -525,7 +662,10 @@ export function parseCsv(text: string): ParsedCsv {
 
   const columns: Column[] = header.map((name, c) => {
     const raw = body.map((row) => row[c] ?? "");
-    const { type, nums, times, style, bareYears, unit } = classify(raw, name);
+    const { type, nums, times, style, bareYears, quarterAxis, unit, normalizedUnit } = classify(
+      raw,
+      name
+    );
     // A self-contradicting column often falls short of the numeric threshold and drops to
     // "category" — say why, rather than letting it vanish from the chart unexplained.
     const worthSaying = type === "number" || (type === "category" && style.warn?.kind === "mixed");
@@ -534,16 +674,22 @@ export function parseCsv(text: string): ParsedCsv {
       if (warning) notes.push(warning);
     }
     if (type === "number" && style.mixedUnits && style.mixedUnits.length > 1) {
-      notes.push(
-        `Column “${name}” mixes units (${style.mixedUnits.join(", ")}) — read at face value.`
-      );
+      if (normalizedUnit) {
+        notes.push(
+          `Column “${name}” mixes units (${style.mixedUnits.join(", ")}) — normalized to ${normalizedUnit}.`
+        );
+      } else {
+        notes.push(
+          `Column “${name}” mixes units (${style.mixedUnits.join(", ")}) — read at face value.`
+        );
+      }
     }
     // A date column that fell to text has no other way to announce itself.
     if (type === "category") {
       const unread = unreadDateNote(name, raw);
       if (unread) notes.push(unread);
     }
-    return { name, type, raw, nums, times, bareYears, unit };
+    return { name, type, raw, nums, times, bareYears, quarterAxis, unit };
   });
 
   return {

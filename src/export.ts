@@ -10,6 +10,7 @@ export const PRESETS: ExportPreset[] = [
   // Stories is the thing people actually post from a phone, and a 1:1 export letterboxes
   // into it with grey bands. The layout code already handles portrait.
   { id: "story", label: "IG story · 1080×1920", width: 1080, height: 1920 },
+  { id: "slide", label: "Slide 16:9 · 1920×1080", width: 1920, height: 1080 },
   // A4 landscape at 300 DPI — crisp enough to drop into a printed report.
   { id: "a4print", label: "A4 print · 3508×2480", width: 3508, height: 2480 },
 ];
@@ -78,6 +79,28 @@ export async function exportPng(
     canvas.width = 0;
     canvas.height = 0;
   }
+}
+
+/** Copy the chart PNG to the system clipboard (uses ClipboardItem with image/png). */
+export async function copyPngToClipboard(
+  parsed: ParsedCsv,
+  detection: Detection,
+  title: string,
+  preset: ExportPreset,
+  theme?: ChartTheme
+): Promise<void> {
+  if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) {
+    throw new Error("Clipboard image copy is not supported in this browser — use Download PNG instead.");
+  }
+  const blobPromise = exportPng(parsed, detection, title, preset, theme);
+  let item: ClipboardItem;
+  try {
+    item = new ClipboardItem({ "image/png": blobPromise });
+  } catch {
+    const blob = await blobPromise;
+    item = new ClipboardItem({ "image/png": blob });
+  }
+  await navigator.clipboard.write([item]);
 }
 
 /**

@@ -62,7 +62,20 @@ self.addEventListener("fetch", (event) => {
   }
 
   // Assets are content-hashed, so a cache hit is always correct.
-  event.respondWith(caches.match(req, { ignoreSearch: true }).then((hit) => hit || fetch(req)));
+  event.respondWith(
+    caches.match(req, { ignoreSearch: true }).then(
+      (hit) =>
+        hit ||
+        fetch(req).catch(
+          () =>
+            new Response("Offline — asset not cached.", {
+              status: 503,
+              statusText: "Service Unavailable",
+              headers: { "Content-Type": "text/plain; charset=utf-8" },
+            })
+        )
+    )
+  );
 });
 `;
 }

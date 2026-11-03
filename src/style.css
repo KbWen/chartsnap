@@ -173,10 +173,16 @@ main {
   transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
 
-.chip:hover {
+.chip:hover:not(.active) {
   border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-tint);
+}
+
+.chip.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
 }
 
 .chip:focus-visible {
@@ -252,6 +258,17 @@ main {
   background: var(--info-bg);
   color: var(--info-ink);
   border: 1px solid #cfe3e6;
+}
+
+.status.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
 }
 
 .notes {

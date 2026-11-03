@@ -8,11 +8,20 @@ import {
   isTabularPaste,
   populateSrTable,
   resolveTitle,
+  slugifyTitle,
   withBusy,
 } from "./a11y";
 import { CsvError, decodeUtf8, parseCsv, scrub } from "./csv";
 import { DetectError, detectChart, feasibleTypes } from "./detect";
-import { downloadBlob, exportPng, exportSvg, PRESETS, renderSvgString, shareFile } from "./export";
+import {
+  copyPngToClipboard,
+  downloadBlob,
+  exportPng,
+  exportSvg,
+  PRESETS,
+  renderSvgString,
+  shareFile,
+} from "./export";
 import type { ChartTheme, ChartType, Detection, ExportPreset, ParsedCsv } from "./types";
 // Bundled sample CSVs, inlined at build time (?raw) so "try a sample" needs no network.
 import sampleLine from "../samples/monthly-sales.csv?raw";
@@ -40,9 +49,11 @@ const notesEl = $<HTMLParagraphElement>("notes");
 const previewCanvas = $<HTMLCanvasElement>("preview");
 const presetSelect = $<HTMLSelectElement>("preset");
 const dlPng = $<HTMLButtonElement>("dl-png");
+const copyPngBtn = $<HTMLButtonElement>("copy-png");
 const dlSvg = $<HTMLButtonElement>("dl-svg");
 const typeButtons = [...document.querySelectorAll<HTMLButtonElement>(".type-btn")];
 const themeToggleEl = $<HTMLElement>("theme-toggle");
+const sampleButtons = [...document.querySelectorAll<HTMLButtonElement>("[data-sample]")];
 
 // ---- app state ----------------------------------------------------------
 interface State {
@@ -75,6 +86,19 @@ function clearStatus(): void {
   statusEl.textContent = "";
   statusEl.className = "status";
 }
+function announceSrStatus(message: string): void {
+  statusEl.textContent = message;
+  statusEl.className = "status sr-only";
+}
+
+/** Sync active state and aria-pressed on sample buttons. */
+function syncSampleChips(activeSampleKey?: string): void {
+  for (const btn of sampleButtons) {
+    const active = btn.dataset.sample === activeSampleKey;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-pressed", String(active));
+  }
+}
 
 /**
  * Downscale a preset to a snappy preview size, keeping its aspect ratio. Font ratios are kept
@@ -92,10 +116,11 @@ function renderPreview(): void {
   if (!state) return;
   const preset = currentPreset();
   const { w, h } = previewSize(preset);
+  previewChart?.destroy();
+  previewChart = null;
   previewCanvas.width = w;
   previewCanvas.height = h;
 
-  previewChart?.destroy();
   const config = buildConfig(state.parsed, state.detection, {
     title: state.title,
     width: w,
@@ -132,20 +157,37 @@ function showNotes(parsed: ParsedCsv, detection: Detection): void {
   notesEl.textContent = collectNotes(parsed, detection).join("\n");
 }
 
-function render(parsed: ParsedCsv, sourceTitle?: string): void {
+function render(
+  parsed: ParsedCsv,
+  sourceTitle?: string,
+  opts: { silent?: boolean; skipScroll?: boolean; sampleKey?: string } = {}
+): void {
   // A new dataset always starts from a fresh auto-detection (the toggle re-syncs below).
   const detection = detectChart(parsed); // may throw DetectError
   const cleanSource = sourceTitle?.trim() || undefined;
   const title = resolveTitle(detection, parsed, cleanSource);
   state = { parsed, detection, title, sourceTitle: cleanSource };
 
+  syncSampleChips(opts.sampleKey);
   infoEl.textContent = detection.reason;
   showNotes(parsed, detection);
   resultEl.hidden = false;
-  clearStatus();
+
+  if (!opts.silent) {
+    if (collectNotes(parsed, detection).length === 0) {
+      announceSrStatus(`Rendered ${detection.type} chart: ${title}.`);
+    } else {
+      clearStatus();
+    }
+  } else {
+    clearStatus();
+  }
+
   renderPreview();
   syncToggle(parsed, detection.type);
-  resultEl.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+  if (!opts.skipScroll) {
+    resultEl.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+  }
 }
 
 /** Escape hatch: re-render the current data as an explicitly chosen chart type. */
@@ -218,16 +260,24 @@ themeToggleEl.addEventListener("click", (e) => {
  * about their own data. This sentence is true for both, and points the second at the fix.
  */
 const UNDECODABLE_NOTE =
-  "Some characters didn't decode as UTF-8 — any label showing “�” is one of them. If the whole chart looks garbled, re-save the file as UTF-8 CSV (most spreadsheets: “Save As → CSV UTF-8”).";
+  "Some characters didn't decode as UTF-8 — any label showing “\uFFFD” is one of them. If the whole chart looks garbled, re-save the file as UTF-8 CSV (most spreadsheets: “Save As → CSV UTF-8”).";
 
-function handleText(text: string, sourceTitle?: string, extraNotes: string[] = []): void {
+function handleText(
+  text: string,
+  sourceTitle?: string,
+  extraNotes: string[] = [],
+  opts: { silent?: boolean; skipScroll?: boolean; sampleKey?: string } = {}
+): void {
   try {
     const parsed = parseCsv(text);
     // Ahead of the parser's own notes: if the labels are mojibake, that's the first thing to say.
     parsed.notes.unshift(...extraNotes);
-    render(parsed, sourceTitle);
+    render(parsed, sourceTitle, opts);
   } catch (err) {
+    previewChart?.destroy();
+    previewChart = null;
     state = null;
+    syncSampleChips(undefined);
     if (err instanceof CsvError || err instanceof DetectError) {
       showStatus(err.message, "error");
     } else {
@@ -241,9 +291,13 @@ function handleText(text: string, sourceTitle?: string, extraNotes: string[] = [
   }
 }
 
+let fileLoadSeq = 0;
+
 function handleFile(file: File): void {
+  const reqId = ++fileLoadSeq;
   const reader = new FileReader();
   reader.onload = () => {
+    if (reqId !== fileLoadSeq) return;
     const buf = reader.result as ArrayBuffer;
     const { text, looksNonUtf8 } = decodeUtf8(buf);
     // Chart it either way, and say what happened. Refusing was the most destructive thing this
@@ -256,7 +310,10 @@ function handleFile(file: File): void {
     const base = scrub(file.name.replace(/\.[^.]+$/, ""));
     handleText(text, base, looksNonUtf8 ? [UNDECODABLE_NOTE] : []);
   };
-  reader.onerror = () => showStatus("Could not read that file.", "error");
+  reader.onerror = () => {
+    if (reqId !== fileLoadSeq) return;
+    showStatus("Could not read that file.", "error");
+  };
   reader.readAsArrayBuffer(file);
 }
 
@@ -277,11 +334,23 @@ pasteRender.addEventListener("click", () => {
   if (text.trim()) handleText(text);
 });
 
-// paste: anywhere on the page (unless typing into the textarea)
+// paste: anywhere on the page (unless typing into an input/textarea)
 document.addEventListener("paste", (e) => {
-  if (document.activeElement === pasteArea) return;
+  if (
+    document.activeElement === pasteArea ||
+    document.activeElement instanceof HTMLInputElement ||
+    document.activeElement instanceof HTMLTextAreaElement
+  ) {
+    return;
+  }
   const text = e.clipboardData?.getData("text");
   if (isTabularPaste(text)) {
+    try {
+      const p = parseCsv(text!);
+      detectChart(p);
+    } catch {
+      return;
+    }
     e.preventDefault();
     handleText(text!);
   }
@@ -293,12 +362,12 @@ const SAMPLES: Record<string, { csv: string; title: string }> = {
   bar: { csv: sampleBar, title: "Fruit votes" },
   scatter: { csv: sampleScatter, title: "Height vs weight" },
 };
-for (const btn of document.querySelectorAll<HTMLButtonElement>("[data-sample]")) {
+for (const btn of sampleButtons) {
   btn.addEventListener("click", () => {
-    const sample = SAMPLES[btn.dataset.sample ?? ""];
+    const key = btn.dataset.sample ?? "";
+    const sample = SAMPLES[key];
     if (sample) {
-      handleText(sample.csv, sample.title);
-      resultEl.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+      handleText(sample.csv, sample.title, [], { sampleKey: key });
     }
   });
 }
@@ -315,7 +384,8 @@ dlPng.addEventListener(
       if (!state) return;
       const preset = currentPreset();
       const blob = await exportPng(state.parsed, state.detection, state.title, preset, currentTheme());
-      const name = `chartsnap-${preset.id}.png`;
+      const slug = slugifyTitle(state.title);
+      const name = `${slug}-${preset.id}.png`;
       // On a phone the share sheet is the only route to the camera roll, and the camera roll is
       // the only route into Instagram. Only "unavailable" falls back to a download — dismissing
       // the sheet is an answer, and downloading anyway would be the file-in-Files dead end this
@@ -323,6 +393,26 @@ dlPng.addEventListener(
       if ((await shareFile(blob, name)) === "unavailable") downloadBlob(blob, name);
     },
     (err) => showStatus(`Export failed: ${err.message}`, "error")
+  )
+);
+
+copyPngBtn.addEventListener(
+  "click",
+  withBusy(
+    copyPngBtn,
+    "Copying…",
+    async () => {
+      if (!state) return;
+      await copyPngToClipboard(
+        state.parsed,
+        state.detection,
+        state.title,
+        currentPreset(),
+        currentTheme()
+      );
+      showStatus("Copied PNG to clipboard.", "info");
+    },
+    (err) => showStatus(`Copy failed: ${err.message}`, "error")
   )
 );
 
@@ -335,7 +425,8 @@ dlSvg.addEventListener(
       if (!state) return;
       const preset = currentPreset();
       const blob = exportSvg(state.parsed, state.detection, state.title, preset, currentTheme());
-      downloadBlob(blob, `chartsnap-${preset.id}.svg`);
+      const slug = slugifyTitle(state.title);
+      downloadBlob(blob, `${slug}-${preset.id}.svg`);
     },
     (err) => showStatus(`Export failed: ${err.message}`, "error")
   )
@@ -346,8 +437,19 @@ dlSvg.addEventListener(
 // README makes, so it registers on every production load — but a failure here must never
 // cost the user their chart, hence the silent catch.
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
+  const registerSw = () => {
     void navigator.serviceWorker.register("./sw.js").catch(() => undefined);
+  };
+  if (document.readyState === "complete") registerSw();
+  else window.addEventListener("load", registerSw);
+}
+
+// Initial sample chart render (silent, no scroll) so the page isn't an empty dropzone
+if (!state) {
+  handleText(SAMPLES.line.csv, SAMPLES.line.title, [], {
+    silent: true,
+    skipScroll: true,
+    sampleKey: "line",
   });
 }
 
@@ -355,6 +457,7 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
 if (import.meta.env.DEV) {
   (window as Window & { __cs?: unknown }).__cs = {
     load: (text: string, title?: string) => handleText(text, title),
+    loadFile: (file: File) => handleFile(file),
     decode: (buf: ArrayBuffer) => decodeUtf8(buf),
     state: () => state,
     setTheme: (id: string) => {

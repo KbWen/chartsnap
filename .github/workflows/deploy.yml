@@ -19,23 +19,19 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
         with:
           node-version: 20
           cache: npm
       # node-canvas (dev-only) — the SVG smoke test needs it, and that test is the tripwire
-      # for the vector export. This workflow and ci.yml both trigger on push, and Actions
-      # does no cross-workflow gating, so until now a red smoke test shipped to Pages anyway.
-      # Running the suite here costs a duplicate apt+test on main and buys a deploy that
-      # fails closed. Splitting it (hermetic tests here, canvas tests in ci.yml) was the
-      # first plan and does not work: nothing would stop a broken export from deploying,
-      # which is the whole point of the gate.
+      # for the vector export. ci.yml skips main/master pushes to eliminate duplicate runner
+      # waste, while deploy.yml maintains the full test suite so deployment still fails closed.
       - run: sudo apt-get update && sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
         with:
           path: dist
 
@@ -47,4 +43,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

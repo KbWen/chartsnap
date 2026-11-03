@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import { Chart } from "chart.js";
@@ -56,21 +56,87 @@ describe("v1.7: Full-Width Digits Normalization (NFKC)", () => {
 });
 
 describe("v1.7: Chart.js Locale Determinism", () => {
-  it("buildConfig explicitly sets locale to 'en-US' for deterministic thousand separators", () => {
+  it("renders US-formatted thousands-separator ticks (1,000,000) in exported SVG <text> nodes", () => {
     const csv = "category,value\nA,1000000\nB,2500000";
     const parsed = parseCsv(csv);
     const detection = detectChart(parsed);
     const config = buildConfig(parsed, detection, { width: 800, height: 600 });
 
     expect(config.options?.locale).toBe("en-US");
+
+    const svg = renderSvgString(parsed, detection, "Revenue", PRESETS[0]);
+    const normalizeRoot = svg.replace(
+      /(<svg\b)([^>]*?)( xmlns:xlink="http:\/\/www\.w3\.org\/1999\/xlink")([^>]*?)\3/,
+      "$1$2$3$4"
+    );
+    const doc = new DOMParser().parseFromString(normalizeRoot, "image/svg+xml");
+    const texts = [...doc.querySelectorAll("text")].map((el) => el.textContent?.trim() ?? "");
+    expect(texts.some((t) => /^\d{1,3}(?:,\d{3}){2}$/.test(t))).toBe(true);
+    expect(texts).toContain("1,000,000");
   });
 });
 
-describe("v1.7: Service Worker Navigate Fallback Resilience", () => {
-  it("sw.js navigate handler falls back safely instead of returning undefined to respondWith", () => {
+describe("v1.7: Service Worker Navigate & Asset Fallback Resilience", () => {
+  it("executes generated SW fetch handler and resolves 503 Response on offline cache misses", async () => {
     const viteConfigSrc = readFileSync(resolve(__dirname, "../vite.config.ts"), "utf-8");
-    // Must handle miss gracefully: e.g. caches.match(...) .then(hit => hit || Response.error()) or similar
-    expect(viteConfigSrc).not.toContain("caches.match(\"./\").then((hit) => hit || caches.match(\"./index.html\"))");
+    const match = /function serviceWorkerSource[\s\S]*?return `([\s\S]*?)`;\s*\}/.exec(viteConfigSrc);
+    expect(match).not.toBeNull();
+    const swScript = match![1]
+      .replace("${version}", "testver")
+      .replace("${JSON.stringify(urls, null, 2)}", '["./", "./index.html"]');
+
+    const listeners: Record<string, (event: any) => void> = {};
+    const mockSelf = {
+      location: { origin: "https://example.com" },
+      skipWaiting: () => Promise.resolve(),
+      clients: { claim: () => Promise.resolve() },
+      addEventListener: (type: string, cb: (event: any) => void) => {
+        listeners[type] = cb;
+      },
+    };
+    const mockCaches = {
+      open: async () => ({ addAll: async () => undefined }),
+      keys: async () => [],
+      delete: async () => true,
+      match: vi.fn(async () => undefined),
+    };
+    const mockFetch = vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+
+    new Function("self", "caches", "fetch", "Response", "URL", swScript)(
+      mockSelf,
+      mockCaches,
+      mockFetch,
+      Response,
+      URL
+    );
+
+    expect(typeof listeners.fetch).toBe("function");
+
+    // 1. Offline navigate miss -> resolves to 503 Response (never undefined)
+    let navResult: Promise<Response> | undefined;
+    listeners.fetch({
+      request: { method: "GET", url: "https://example.com/", mode: "navigate" },
+      respondWith: (p: Promise<Response>) => {
+        navResult = p;
+      },
+    });
+    const navResp = await navResult;
+    expect(navResp).toBeInstanceOf(Response);
+    expect(navResp?.status).toBe(503);
+
+    // 2. Offline non-navigate asset miss -> resolves to 503 Response (never rejects unhandled)
+    let assetResult: Promise<Response> | undefined;
+    listeners.fetch({
+      request: { method: "GET", url: "https://example.com/assets/app.js", mode: "cors" },
+      respondWith: (p: Promise<Response>) => {
+        assetResult = p;
+      },
+    });
+    const assetResp = await assetResult;
+    expect(assetResp).toBeInstanceOf(Response);
+    expect(assetResp?.status).toBe(503);
   });
 });
 

@@ -81,9 +81,30 @@ export function detectChart(parsed: ParsedCsv, force?: ChartType): Detection {
       // A scatter uses exactly two columns; any others are plotted nowhere.
       droppedSeries: names(c.numbers.slice(2)),
       yearAxis: false,
+      quarterAxis: false,
       reason: forced
         ? `Scatter: "${yc.name}" vs "${xc.name}".`
         : `Two numeric columns ("${xc.name}" vs "${yc.name}") → scatter plot.`,
+    };
+  }
+
+  // Forced line on purely numeric multi-column data (e.g. Dose vs Response):
+  // use the first numeric column as a continuous linear X axis instead of plotting
+  // both X and Y as separate series over synthetic row indices.
+  if (type === "line" && c.dates.length === 0 && c.categories.length === 0 && c.numbers.length >= 2) {
+    const x = c.numbers[0];
+    const yColumns = c.numbers.slice(1, 1 + MAX_SERIES);
+    const droppedSeries = names(c.numbers.slice(1 + MAX_SERIES));
+    const yDesc = yColumns.map((col) => `"${col.name}"`).join(", ");
+    return {
+      type: "line",
+      xColumn: x,
+      yColumns,
+      timeAxis: false,
+      droppedSeries,
+      yearAxis: false,
+      quarterAxis: false,
+      reason: `Line chart: ${yDesc} over "${x.name}".`,
     };
   }
 
@@ -96,6 +117,7 @@ export function detectChart(parsed: ParsedCsv, force?: ChartType): Detection {
   const yColumns = c.numbers.slice(0, MAX_SERIES);
   const droppedSeries = names(c.numbers.slice(MAX_SERIES));
   const yearAxis = timeAxis && x.bareYears === true;
+  const quarterAxis = timeAxis && x.quarterAxis === true;
 
   let reason: string;
   if (forced) {
@@ -108,5 +130,5 @@ export function detectChart(parsed: ParsedCsv, force?: ChartType): Detection {
     reason = `One numeric column ("${c.numbers[0].name}") → bar chart by row.`;
   }
 
-  return { type, xColumn: x, yColumns, timeAxis, droppedSeries, yearAxis, reason };
+  return { type, xColumn: x, yColumns, timeAxis, droppedSeries, yearAxis, quarterAxis, reason };
 }

@@ -33,14 +33,24 @@ describe("v1.11 Multi-Persona Real-World Resilience", () => {
     });
 
     it("emits warning when a single column mixes distinct units, but stays silent when consistent", () => {
-      // Mixed units in the same column
+      // Mixed commensurable CJK magnitude units in the same column: normalized to dominant unit (v1.12)
       const mixedCsv = "Branch,Revenue\nTaipei,50萬元\nTaichung,800千元\nTainan,1.2億元";
       const parsedMixed = parseCsv(mixedCsv);
       expect(parsedMixed.columns[1].type).toBe("number");
-      expect(parsedMixed.columns[1].nums).toEqual([50, 800, 1.2]);
+      expect(parsedMixed.columns[1].nums).toEqual([50, 80, 12000]);
+      expect(parsedMixed.columns[1].unit).toBe("萬元");
       const mixedNote = parsedMixed.notes.find((n) => n.includes("mixes units"));
       expect(mixedNote).toBeDefined();
-      expect(mixedNote).toContain("Column “Revenue” mixes units (萬元, 千元, 億元) — read at face value.");
+      expect(mixedNote).toContain("Column “Revenue” mixes units (萬元, 千元, 億元) — normalized to 萬元.");
+
+      // Incommensurable mixed units in the same column: face value + unit cleared so axis doesn't lie
+      const mixedCurrencyCsv = "Branch,Price\nUS,$100\nEU,80 €\nUK,£70";
+      const parsedCurrency = parseCsv(mixedCurrencyCsv);
+      expect(parsedCurrency.columns[1].nums).toEqual([100, 80, 70]);
+      expect(parsedCurrency.columns[1].unit).toBeUndefined();
+      expect(parsedCurrency.notes.find((n) => n.includes("mixes units"))).toContain(
+        "Column “Price” mixes units ($, €, £) — read at face value."
+      );
 
       // Consistent unit in column: no warning
       const uniformCsv = "Branch,Revenue\nTaipei,50萬元\nTaichung,80萬元\nTainan,120萬元";

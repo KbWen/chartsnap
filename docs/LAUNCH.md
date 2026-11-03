@@ -18,18 +18,26 @@
 
 ## Evidence of function
 
-- [x] End-to-end run on real input, output verified here (2026-10-07):
+- [x] End-to-end run on real input, output verified here (2026-11-03):
       - All 3 auto-detect paths rendered from real CSVs (samples/): date→line,
         category→bar, two-numeric→scatter — confirmed visually and in tests.
+      - Automatic horizontal bar layout preserves legibility for long or numerous category labels.
+      - Forcing `line` on 2-number data preserves continuous numeric X-axis with proportional spacing.
+      - Robust real-world cleaning verified: single-cell title row extraction, trailing summary
+        row exclusion (`Total`/`合計`), accounting negatives (`(500)`), currency/percentage stripping,
+        CJK magnitude normalization (`億元`/`萬元`/`千元`/`元`), year-first dot dates (`2025.01.05`),
+        and calendar quarters (`2025-Q1`).
       - 3 curated de-AI business themes (editorial, corporate, nordic) verified across
-        all 4 export presets (36 total artifact combinations in test/e2e-audit.test.ts).
+        all 5 export presets (Slide 16:9, Twitter card, IG post, IG story, A4 print) — 45 total
+        artifact combinations in test/e2e-audit.test.ts.
       - SVG export produces valid vector output with responsive viewBox and exact theme
         backgrounds and lead colors for all types and presets.
-      - PNG export produces real PNGs with valid 8-byte PNG header signatures.
+      - PNG export produces real PNGs with valid 8-byte PNG header signatures; 1-click Copy PNG
+        copies image blobs directly to clipboard with descriptive slugified filenames on download.
       - Machado 2009 CVD simulation achieves min pairwise ΔE00 ≥ 15.0 for protanopia
         and deuteranopia on all themes; WCAG graphical contrast ≥ 3:1 across ±1 neighbourhood.
-      - `npm run build` succeeds (237 kB lean bundle); zero CSP violations.
-      - Total test suite: 487 / 487 tests green across 23 test files.
+      - `npm run build` succeeds (lean static bundle); zero CSP violations.
+      - Total test suite: 552 / 552 tests green across 24 test files.
 
 ## Owner handoff
 
@@ -43,7 +51,5 @@
 - [ ] First 3 pieces of feedback (issues/comments/DMs) triaged back into SPEC
       "Later" list or DECISIONS.md
 - [x] After any change to flags/usage, re-verify the README quickstart against a real run
-      — done 2026-07-10 after the v1.2/v1.3 README edits: wiped `node_modules`, ran
-      `npm install` then `npm run dev`, and checked every claim in the README's chart
-      table plus the six-series note, deterministic SVG, and the three export presets.
-      (Standing rule: re-tick this after the next usage change.)
+      — verified 2026-11-03 for v1.12: 5 export presets (incl. 16:9 Slide), 1-click Copy PNG,
+      slugified filenames, horizontal bars, continuous numeric X-axis, and CJK magnitude normalization.

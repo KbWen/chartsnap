@@ -213,6 +213,19 @@ export function buildConfig(
   const yGrid = { color: theme.grid, drawTicks: false, lineWidth: 1 };
   const noBorder = { display: false };
 
+  const sharedUnit =
+    multiSeries &&
+    detection.yColumns[0]?.unit &&
+    detection.yColumns.every((yc) => yc.unit === detection.yColumns[0]?.unit)
+      ? detection.yColumns[0].unit
+      : undefined;
+  const valueAxisTitle = !multiSeries
+    ? axisTitle(
+        formatTitleWithUnit(detection.yColumns[0]?.name ?? "", detection.yColumns[0]?.unit),
+        true
+      )
+    : axisTitle(sharedUnit ?? "", Boolean(sharedUnit));
+
   /** Paints an opaque theme background so exported PNG isn't transparent. */
   const background: Plugin = {
     id: "solidBackground",
@@ -324,7 +337,11 @@ export function buildConfig(
             // on dates the file has no data for. yearAxis stays explicit: a column of bare
             // years knows what it is regardless of how the rows happen to be spaced.
             ...(() => {
-              const unit = detection.yearAxis ? ("year" as const) : tickUnit(x.times);
+              const unit = detection.yearAxis
+                ? ("year" as const)
+                : detection.quarterAxis
+                  ? ("quarter" as const)
+                  : tickUnit(x.times);
               return unit ? { time: { unit } } : {};
             })(),
             grid: { display: false },
@@ -337,10 +354,7 @@ export function buildConfig(
             ticks: ticks({ maxRotation: 0, autoSkip: true, maxTicksLimit: 8, source: "data" }),
           },
           y: {
-            title: axisTitle(
-              formatTitleWithUnit(detection.yColumns[0]?.name ?? "", detection.yColumns[0]?.unit),
-              !multiSeries
-            ),
+            title: valueAxisTitle,
             grid: yGrid,
             border: noBorder,
             ticks: ticks({ maxTicksLimit: 6 }),
@@ -351,14 +365,85 @@ export function buildConfig(
     };
   }
 
+  // ---- line (continuous numeric x axis) ----------------------------------
+  if (detection.type === "line" && detection.xColumn.type === "number") {
+    const x = detection.xColumn;
+    const validRows: number[] = [];
+    for (let r = 0; r < parsed.rowCount; r++) {
+      if (!Number.isNaN(x.nums[r])) validRows.push(r);
+    }
+    validRows.sort((a, b) => x.nums[a] - x.nums[b]);
+    const showPoints = validRows.length <= 12;
+    const datasets: ChartDataset<"line">[] = detection.yColumns.map((yc, i) => {
+      const color = palette[i % palette.length];
+      const data = validRows.map((r) => ({ x: x.nums[r], y: num(yc.nums[r]) }));
+      return {
+        label: formatTitleWithUnit(yc.name, yc.unit),
+        data: data as never,
+        borderColor: color,
+        backgroundColor: color,
+        pointBackgroundColor: color,
+        borderWidth: Math.max(2, px(2.25)),
+        pointRadius: showPoints ? px(3) : 0,
+        pointHoverRadius: px(5),
+        tension: 0,
+        borderCapStyle: "round",
+        borderJoinStyle: "round",
+        spanGaps: false,
+      };
+    });
+    return {
+      type: "line",
+      data: { datasets },
+      options: {
+        locale: "en-US",
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: opts.animate === false ? false : undefined,
+        layout,
+        plugins,
+        scales: {
+          x: {
+            type: "linear",
+            title: axisTitle(formatTitleWithUnit(x.name, x.unit)),
+            grid: { ...yGrid },
+            border: noBorder,
+            ticks: ticks(),
+          },
+          y: {
+            title: valueAxisTitle,
+            grid: yGrid,
+            border: noBorder,
+            ticks: ticks({ maxTicksLimit: 6 }),
+          },
+        },
+      },
+      plugins: [background],
+    };
+  }
+
+  // Chronological row order when x is a parsed date column rendered on a categorical axis
+  // (e.g. forcing bar on a reverse-chronological date CSV).
+  const xCol = detection.xColumn;
+  const rowIndices: number[] = [];
+  if (xCol.type === "date") {
+    for (let r = 0; r < parsed.rowCount; r++) {
+      if (!Number.isNaN(xCol.times[r])) rowIndices.push(r);
+    }
+    rowIndices.sort((a, b) => xCol.times[a] - xCol.times[b]);
+  } else {
+    for (let r = 0; r < parsed.rowCount; r++) rowIndices.push(r);
+  }
+  const labels = rowIndices.map((r) => xCol.raw[r]);
+  const maxLabelLen = labels.reduce((m, l) => Math.max(m, l.length), 0);
+
   // ---- categorical line (line forced onto a category/index x, or no parseable dates) --
   if (detection.type === "line") {
-    const labels = detection.xColumn.raw;
     const lineDatasets: ChartDataset<"line">[] = detection.yColumns.map((yc, i) => {
       const color = palette[i % palette.length];
       return {
         label: formatTitleWithUnit(yc.name, yc.unit),
-        data: labels.map((_, r) => num(yc.nums[r])) as never,
+        data: rowIndices.map((r) => num(yc.nums[r])) as never,
         borderColor: color,
         backgroundColor: color,
         pointBackgroundColor: color,
@@ -385,13 +470,13 @@ export function buildConfig(
           x: {
             grid: { display: false },
             border: noBorder,
-            ticks: ticks({ autoSkip: true, maxRotation: labels.length > 12 ? 55 : 0 }),
+            ticks: ticks({
+              autoSkip: true,
+              maxRotation: labels.length > 12 || maxLabelLen > 16 ? 55 : 0,
+            }),
           },
           y: {
-            title: axisTitle(
-              formatTitleWithUnit(detection.yColumns[0]?.name ?? "", detection.yColumns[0]?.unit),
-              !multiSeries
-            ),
+            title: valueAxisTitle,
             grid: yGrid,
             border: noBorder,
             ticks: ticks({ maxTicksLimit: 6 }),
@@ -403,12 +488,16 @@ export function buildConfig(
   }
 
   // ---- bar / categorical -------------------------------------------------
-  const labels = detection.xColumn.raw;
+  const horizontal =
+    xCol.type !== "date" &&
+    xCol.name !== "Row" &&
+    (maxLabelLen > 16 || (labels.length > 10 && maxLabelLen > 4));
+
   const datasets: ChartDataset<"bar">[] = detection.yColumns.map((yc, i) => {
     const color = palette[i % palette.length];
     return {
       label: formatTitleWithUnit(yc.name, yc.unit),
-      data: labels.map((_, r) => num(yc.nums[r])) as never,
+      data: rowIndices.map((r) => num(yc.nums[r])) as never,
       backgroundColor: color,
       borderColor: color,
       borderWidth: 0,
@@ -419,6 +508,37 @@ export function buildConfig(
       barPercentage: 0.86,
     };
   });
+
+  if (horizontal) {
+    return {
+      type: "bar",
+      data: { labels, datasets },
+      options: {
+        indexAxis: "y" as const,
+        locale: "en-US",
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: opts.animate === false ? false : undefined,
+        layout,
+        plugins,
+        scales: {
+          x: {
+            beginAtZero: true,
+            title: valueAxisTitle,
+            grid: yGrid,
+            border: noBorder,
+            ticks: ticks({ maxTicksLimit: 6 }),
+          },
+          y: {
+            grid: { display: false },
+            border: noBorder,
+            ticks: ticks({ autoSkip: labels.length > 18, maxRotation: 0 }),
+          },
+        },
+      },
+      plugins: [background],
+    };
+  }
 
   return {
     type: "bar",
@@ -434,14 +554,14 @@ export function buildConfig(
         x: {
           grid: { display: false },
           border: noBorder,
-          ticks: ticks({ autoSkip: true, maxRotation: labels.length > 12 ? 55 : 0 }),
+          ticks: ticks({
+            autoSkip: xCol.type === "date" || labels.length > 10 || maxLabelLen > 16,
+            maxRotation: labels.length > 12 || maxLabelLen > 16 ? 55 : 0,
+          }),
         },
         y: {
           beginAtZero: true,
-          title: axisTitle(
-            formatTitleWithUnit(detection.yColumns[0]?.name ?? "", detection.yColumns[0]?.unit),
-            !multiSeries
-          ),
+          title: valueAxisTitle,
           grid: yGrid,
           border: noBorder,
           ticks: ticks({ maxTicksLimit: 6 }),

@@ -646,23 +646,70 @@ Addresses the 6 persona-driven gaps uncovered by executed runs across European a
       - Extract/update `withBusy` so it sets `aria-busy="true"` during execution, clears `aria-busy` in `finally`, and restores `.focus()` to the button if it was the `document.activeElement` before being disabled.
       - **Must keep working:** All 468 existing tests pass (+19 v1.11 tests, 487 total across 23 suites); `npm run build` succeeds; PNG and SVG exports remain byte-deterministic; zero CSP violations.
 
+## v1.12 — silent-wrong-chart remediation, publication craft & workflow polish (confirmed 2026-11-03 via delegated multi-subagent adversarial review)
+
+Synthesized from the 2026-11-02 benchmark review (Datawrapper, Financial Times, Ray.so, Carbon, Excalidraw, Squoosh), executed codebase audit, and 3-adversary pre-mortem stress test. Every mechanism below was prototyped and verified against existing test invariants before code was written.
+
+### Done criteria (v1.12)
+
+- [x] **No anonymous bars — long or numerous categories auto-switch to horizontal bars (`src/chart.ts`).**
+      - When `detection.type === "bar"`, `detection.xColumn.type !== "date"`, and `detection.xColumn.name !== "Row"`, if `maxLabelLen > 16 || (labels.length > 10 && maxLabelLen > 4)`, `buildConfig` switches to `indexAxis: "y"` with `scales.x` as the numeric value axis (`beginAtZero: true`, gridlines, axis title) and `scales.y` as the horizontal category axis (`grid: { display: false }`, `maxRotation: 0`, `autoSkip: labels.length > 18`), preserving CSV top-to-bottom category order (`y_0 < y_1`).
+      - For vertical categorical bar charts (`xColumn.type !== "date"` and below the horizontal threshold), `autoSkip` is `false` when `labels.length <= 10 && maxLabelLen <= 16` so no category bar is ever drawn without its label. Categorical `line` charts set `maxRotation: labels.length > 12 || maxLabelLen > 16 ? 55 : 0`.
+      - **Asserted as a property:** Across all 5 presets (`twitter`, `instagram`, `story`, `slide`, `a4print`), an 8-department long-label CSV (`17–34` chars each) renders all `8` department labels in the exported SVG `<text>` nodes (`labelsRendered === 8`, where v1.11 rendered `4`) with monotonic top-to-bottom `y` coordinates and `x >= 0`.
+      - **Must keep working:** `samples/fruit-votes.csv` (6 rows, max label 8 chars), `samples/edge-cases.csv` (4 rows, max label 14 chars), 12-row single-numeric-column charts (`Row` synthetic X), 12-row 2-letter code charts (`US, UK...`), and short 2–3 row bar charts keep vertical orientation, `scales.y.title`, rounded bar geometry, and byte-identical PNG/SVG exports (`reproducibility.test.ts`).
+
+- [x] **Intra-column CJK magnitude normalization & honest mixed-unit axes (`src/csv.ts`, `src/a11y.ts`, `src/chart.ts`).**
+      - Supersedes v1.11's face-value fallback specifically for **commensurable CJK decimal magnitude suffixes** (`億元?` = $10^8$, `萬元?` = $10^4$, `千元?` = $10^3$, `元` = $1$, preserving any consistent leading currency prefix such as `NT$ 50萬元`): when a numeric column mixes only commensurable CJK magnitude units (with plain `0` cells allowed to inherit the scale), `parseCsv` scales every cell into the column's dominant unit (ties broken by first-seen unit; rounded via `toPrecision(12)` to avoid IEEE-754 float noise in `#sr-table`) and emits a note (`Column “Revenue” mixes units (...) — normalized to <unit>.`), eliminating the 10,000× visual inversion on exported charts.
+      - When a single column mixes **incommensurable** units (e.g. `$100` vs `€80`, or `$100` vs `50萬元`), values remain at face value with the `"read at face value"` note, and `column.unit` is cleared (`undefined`) so the exported PNG/SVG never falsely labels the entire axis `Price ($)`.
+      - `mixedUnitsNote` (`src/a11y.ts`) compares raw `yColumns.map(c => c.unit ?? "")` so shared-axis multi-series charts mixing a unit (`$`, `%`) with a unitless column (`""`) emit a clear warning, closing the `.filter(Boolean)` blind spot.
+      - When **all** plotted `yColumns` on a multi-series `line` or `bar` chart share the exact same non-empty `unit`, the value-axis title (`scales.y` or `scales.x` when horizontal) displays that shared unit (`axisTitle(sharedUnit, true)`); heterogeneous or unitless multi-series keep the value-axis title hidden.
+      - **Asserted as a property:** In the exported SVG for `A,2億元` vs `B,5000萬元`, bar `A`'s geometric length is `4×` bar `B`'s (and for `1.2億元` vs `50萬元`, ratio `> 100×`), whereas v1.11 rendered `A` shorter than `B`.
+      - **Must keep working:** Uniform-unit columns (`50萬元, 80萬元`) emit no note; cross-column `$` vs `%` still emits `Multi-series chart contains mixed units ($, %) on the same axis`; scatter plots emit no mixed-unit warning.
+
+- [x] **Chronological & continuous-axis integrity across `line` / `bar` / `scatter` overrides (`src/detect.ts`, `src/chart.ts`, `src/a11y.ts`).**
+      - **Chronological bar/line parity:** When `detection.xColumn.type === "date"` on a non-time-scale chart (e.g. forcing `bar` on a newest-first CSV `2025-03-01, 2025-02-01, 2025-01-01`), `buildConfig` sorts valid date rows chronologically (`Oldest → Newest`) and filters `NaN` dates identically to time-axis `line`, keeping `config.data.labels`, `datasets`, SVG `<text>` X-positions, and `#sr-table` synchronized.
+      - **Continuous numeric X-axis on forced `line`:** When a CSV has `>= 2` numeric columns and no date or category columns (e.g. `Dose (mg), Response (%)` with `[1, 2, 10]` or `samples/height-weight.csv`), forcing `line` plots `numbers.slice(1, 1 + MAX_SERIES)` against `xColumn = numbers[0]` on a continuous `linear` X-axis (sorted by X, with `{x, y}` points, `scales.x` title, and full `buildSrSummary` + `populateSrTable` support) instead of plotting both columns over synthetic `Row 1..N`. Asserted on SVG path geometry: horizontal pixel span `dx(2→10) > 6 * dx(1→2)`.
+      - **Scatter entity labels:** When forcing `scatter` on a CSV that also contains a category or date column (`Country, GDP, Population, Area`), `populateSrTable` includes that column as `<th scope="row">` row headers in `#sr-table` (aligned with valid numeric `{x, y}` rows), and `collectNotes` notes that label column `"Country"` is not shown on scatter points while keeping `detection.droppedSeries` strictly for dropped numeric columns (`["Area"]`).
+      - **Must keep working:** Ascending date CSVs (`samples/monthly-sales.csv`), category+number CSVs forced to `line`, single-numeric-column CSVs (`bar` by `Row`), and `robustness.test.ts` `droppedSeries` assertions remain unchanged.
+
+- [x] **Summary-row (`Total` / `合計`) guard, scientific-notation units, regional currencies & dot/quarter dates (`src/csv.ts`, `src/detect.ts`, `src/chart.ts`, `src/types.ts`).**
+      - **Trailing summary-row exclusion:** In a `while (body.length >= 3)` loop before column classification, when the final row's first label cell matches an exact summary token (`/^(?:total|grand\s+total|sub[-\s]?total|sum|average|avg|mean|合計|總計|小計|總額|平均)$/i`), at least 2 data rows remain above it, and at least one numeric cell appears in that row while all non-label cells are numeric or missing placeholders, `parseCsv` peels that trailing row and appends a note (`Excluded summary row “Total” so it doesn't distort the scale.`) — handling stacked `Total` + `Average` footers and preventing `"2025-01, 2025-02, 2025-03, Total"` (`3/4 = 0.75 < 0.8`) from degrading from a time `line` chart into a `bar` chart dominated by `Total`. Names like `"TotalEnergies"` or `"Total Recall"` are untouched.
+      - **Scientific-notation unit & EU comma-exponent support:** `detectNumberStyle` counts units for `VALID_NUM_RE` cells before the `NUMERIC_SHAPE` separator filter (preserving `unit: "$"` on `$1.5e6` without regressing `"1.111.222"` + `"1.234e5"` in `test/numbers.test.ts:71`), and `detectNumberStyle` + `toNumber` recognize single-comma scientific notation (`1,5e6` → `1500000`).
+      - **Regional currencies & unambiguous dates:** Expand `CURRENCY_PREFIX` / `UNIT_SUFFIX` with `HK$`, `HKD`, `S$`, `SGD`, `A$`, `AUD`, `C$`, `CAD`, `NZ$`, `NZD`, `CHF`, `₩`, `KRW`, `₹`, `INR` (longest-first, ticker guard intact for `$AAPL` / `HK$AAPL`). Support **3-segment** year-first dot dates (`2025.01.05` as validated local midnight; 2-segment `2025.01` is intentionally excluded so decimal prices like `2025.01` are never hijacked as dates) and quarters (`2025-Q1`..`2025-Q4`, `2025 Q1`, `Q1 2025`, `2025/Q1` with `quarterAxis` setting `time.unit = "quarter"` while keeping `date-adapter.ts`'s pinned `"QQQ - yyyy"` format).
+
+- [x] **Zero-friction sharing & resilient UI lifecycle (`src/export.ts`, `src/main.ts`, `src/a11y.ts`, `src/style.css`, `index.html`, `vite.config.ts`).**
+      - **1-Click `Copy PNG` to clipboard:** Add `<button id="copy-png" type="button" class="btn">Copy PNG</button>` to `.export-bar` (`#dl-png` stays primary `.btn.btn-primary`; `#dl-svg` uses `.btn` for clean hierarchy), writing `ClipboardItem` (`Promise<Blob>` first for Safari transient activation, falling back to `await blobPromise` if needed), announcing `"Copied PNG to clipboard."` via `.status.info`, with graceful error feedback if unsupported.
+      - **Presentation `Slide 16:9 · 1920×1080` preset & slugified filenames:** Insert `{ id: "slide", label: "Slide 16:9 · 1920×1080", width: 1920, height: 1080 }` into `PRESETS` before `a4print` (keeping `PRESETS[PRESETS.length - 1]` as `a4print` for `test/png.test.ts`). Export filenames use `slugifyTitle(state.title)` (Unicode `\p{L}\p{N}`, max 50 chars: `${slug}-${preset.id}.png`/`.svg`, falling back to `chartsnap-${preset.id}`).
+      - **Silent live sample on initial load:** Pre-render `Monthly sales` on initial page load without scrolling (`skipScroll`) and without `#status` chatter, styling `.chip.active` + `aria-pressed="true"` via `syncSampleChips`; any file load, paste, `__cs.load()`, or error clears chip active state, and explicit load errors still reset `state = null` and hide `#result`.
+      - **Non-destructive global paste, `FileReader` race guard, Chart cleanup & SW catch:**
+        1. Opportunistic `document` `paste` ignores `INPUT`/`TEXTAREA` targets and pre-validates `parseCsv` + `detectChart` in `try/catch` before touching state — accidental multi-line prose/code pastes stay completely inert without wiping an active chart or flashing errors.
+        2. `handleFile` guards `FileReader` callbacks with a monotonic request ID so a slow earlier file cannot overwrite a newer file.
+        3. `handleText` error catch calls `previewChart?.destroy(); previewChart = null;`, and `renderPreview` destroys the previous `previewChart` *before* mutating `previewCanvas.width/height`.
+        4. User-initiated renders announce brief screen-reader confirmation via `.status.sr-only` when `notes` is empty (WCAG 4.1.3 without visual banner clutter), and `vite.config.ts` adds a `.catch()` fallback `503 Response` on offline non-navigate asset cache misses.
+
+- [x] **Documentation sync, supply-chain pinning & Core Rule 2 property assertions (`README.md`, `docs/`, `CONTRIBUTING.md`, `.github/workflows/`, `package.json`, `test/`).**
+      - Update `README.md`, `CONTRIBUTING.md`, and `docs/LAUNCH.md` to accurately reflect v1.10–v1.12 capabilities, 5 presets, and test counts; annotate shipped items in `docs/SPEC.md`'s historical `Later` notes.
+      - Pin GitHub Actions in `ci.yml` and `deploy.yml` to verified commit SHAs, deduplicate redundant `push: [main]` runs in `ci.yml` (while keeping `deploy.yml`'s fail-closed `npm test && npm run build` gate), and pin `devDependencies` in `package.json` + `package-lock.json` to exact lockfile versions (`1.12.0`).
+      - Upgrade `readFileSync` substring checks in `test/v17.test.ts` to behavioral assertions (verifying rendered `1,000,000` comma ticks in exported SVG `<text>` nodes and executing the generated SW script against mock `caches`/`fetch`).
+      - **Must keep working:** All existing tests (updated only at `test/v111.test.ts:37-44` where v1.12 explicitly supersedes v1.11's mixed-CJK face-value expectation) plus new v1.12 property suites pass across all 5 presets and 3 themes; `npm run build` succeeds; PNG and SVG exports remain byte-deterministic; zero CSP violations.
+
 ## Non-goals / Later / Not now
 
 - NO field/axis mapping or chart-type gallery UI (that is RAWGraphs' turf — we lose if we
   compete there). The single line/bar/scatter override above is an escape hatch, NOT field
   configuration; zero-config stays the default.
 - No dashboards, no multi-chart, no data storage, no accounts, no analytics, no AI
-- Later: color/theme presets, .xlsx input, editable chart title/labels
+- Later: ~~color/theme presets~~ (**shipped in v1.9**), .xlsx input, editable chart title/labels
 - Later (surfaced by the review — see DECISIONS): sort categorical bars by value +
-  horizontal bars for long labels; aggregate (sum/count) categorical data instead of
+  ~~horizontal bars for long labels~~ (**shipped in v1.12**); aggregate (sum/count) categorical data instead of
   plotting/sampling raw rows; data labels on bars.
 
-### Found by the 2026-07-16 review (12 reviewers: 6 expert lenses + 6 user personas)
+### Found by the 2026-07-16 review (12 reviewers: 6 expert lenses + 6 user personas; historical backlog — most items shipped in v1.5–v1.12 as noted below)
 
 Everything the round found that v1.4 does **not** take. Recorded so none of it is lost.
 All were reproduced by an executed run, not by reading.
 
-**v1.5 — accessibility** (the app is not WCAG 2.2 AA today):
+**v1.5 — accessibility** (**shipped across v1.5–v1.12**: contrast in v1.8, DOM title + `#sr-table` + live regions + `<button>` dropzone in v1.6, `prefers-reduced-motion` in v1.7, `withBusy` focus in v1.11, silent-render SR status in v1.12):
 - `--faint` #948d7c is 3.0:1 on paper / 3.3:1 on card — fails AA for the small text it is
   used on, including the drop-zone's "click to browse" (the *only* usable hint on touch).
   `--muted` measures 5.2:1 and is fine.
@@ -677,7 +724,7 @@ All were reproduced by an executed run, not by reading.
 - `prefers-reduced-motion` is honored nowhere. `withBusy` disables the focused button before
   setting "Rendering…", which blurs it, so that text is unannounceable by construction.
 
-**v1.6 — chart quality, mobile, landing:**
+**v1.6 — chart quality, mobile, landing** (**shipped across v1.5–v1.12**: CVD palette in v1.5.2/v1.9, thousands separators + CJK SVG fonts + NFKC in v1.7, mobile `@media` + `navigator.share` + Stories + CSP `connect-src 'none'` in v1.5, horizontal bars + shared multi-series unit + live sample on load in v1.12):
 - Palette: series 3 `#6b7f92` and 4 `#a86a5f` are the **same gray** (BT.601 luma 123.2 vs
   123.3) — indistinguishable in B&W print; series 3–6 sit within 11 levels. Only 1–2 survive
   grayscale, and only `borderColor` varies, so there is no redundant encoding. Add a
@@ -705,8 +752,8 @@ All were reproduced by an executed run, not by reading.
   violations, PNG+SVG still export, and every exfil vector blocked. Full-width digits
   (`１２３`) need NFKC normalization.
 
-**Needs a scope decision before it can be specced** (each edges toward the field-mapping
-non-goal, so none is a free "yes"):
+**Needs a scope decision before it can be specced** (note: continuous numeric X on forced `line` and trailing `Total` exclusion **shipped in v1.12**; year header boundary **shipped in v1.11**; currency/percent + units **shipped in v1.10–v1.12**; SW cache fallback + `papaparse` pinning **shipped in v1.5.2/v1.7/v1.12**):
+<!-- historical items below -->
 - **A numeric column can never be the x axis** (`detect.ts` picks `dates[0] ?? categories[0]
   ?? indexColumn`). Forcing a line onto `dose,response` puts dose on the *row index*: 0.5 µM
   and 10 µM steps drawn the same width (verified in the exported SVG — all gaps 654 px), and

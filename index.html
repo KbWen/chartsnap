@@ -20,7 +20,7 @@
     <title>chartsnap — CSV to chart, in your browser</title>
     <meta
       name="description"
-      content="Drop a CSV and get a chart sized for Twitter, Instagram, or A4. Runs in your browser, nothing uploaded. Free PNG and SVG export."
+      content="Drop a CSV and get a chart sized for Twitter, Instagram, Slide (16:9), or A4. Runs in your browser, nothing uploaded. Free PNG and SVG export."
     />
   </head>
   <body>
@@ -51,9 +51,9 @@
 
       <div class="samples">
         <span class="samples-label">no CSV handy?</span>
-        <button type="button" class="chip" data-sample="line">Sales &middot; line</button>
-        <button type="button" class="chip" data-sample="bar">Votes &middot; bar</button>
-        <button type="button" class="chip" data-sample="scatter">Height/weight &middot; scatter</button>
+        <button type="button" class="chip" data-sample="line" aria-pressed="false">Sales &middot; line</button>
+        <button type="button" class="chip" data-sample="bar" aria-pressed="false">Votes &middot; bar</button>
+        <button type="button" class="chip" data-sample="scatter" aria-pressed="false">Height/weight &middot; scatter</button>
       </div>
 
       <details id="paste-details" class="paste">
@@ -100,9 +100,10 @@
           <label for="preset" class="export-label">Size</label>
           <select id="preset" class="select"></select>
           <button id="dl-png" type="button" class="btn btn-primary">Download PNG</button>
-          <button id="dl-svg" type="button" class="btn btn-primary">Download SVG</button>
+          <button id="copy-png" type="button" class="btn">Copy PNG</button>
+          <button id="dl-svg" type="button" class="btn">Download SVG</button>
         </div>
-        <p class="export-hint">Both free, no watermark.</p>
+        <p class="export-hint">Free PNG, clipboard copy & vector SVG — no watermark.</p>
       </section>
     </main>
 

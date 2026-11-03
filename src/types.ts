@@ -11,6 +11,8 @@ export interface Column {
   times: number[];
   /** True when this date column came from bare 4-digit years, so the axis can label by year. */
   bareYears?: boolean;
+  /** True when this date column came from quarter labels (e.g. 2025-Q1), so the axis labels by quarter. */
+  quarterAxis?: boolean;
   /** Currency, percentage or unit symbol extracted from numeric values (e.g. "$", "%", "€"). */
   unit?: string;
 }
@@ -41,6 +43,8 @@ export interface Detection {
   droppedSeries: string[];
   /** True when the time axis spans bare years, so it should tick once per year. */
   yearAxis: boolean;
+  /** True when the time axis spans explicit quarters (e.g. 2025-Q1), so it ticks by quarter. */
+  quarterAxis?: boolean;
   /** Short plain-language reason, shown to the user. */
   reason: string;
 }

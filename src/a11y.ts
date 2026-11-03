@@ -1,7 +1,24 @@
 import type { ChartConfiguration } from "chart.js";
-import type { Detection, ParsedCsv } from "./types";
+import type { Column, Detection, ParsedCsv } from "./types";
 
 const escapeUnitRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+export function slugifyTitle(title: string): string {
+  const slug = title
+    .normalize("NFKC")
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 50)
+    .replace(/-+$/g, "");
+  return slug || "chartsnap";
+}
+
+function findScatterLabelColumn(parsed: ParsedCsv, detection: Detection): Column | undefined {
+  if (detection.type !== "scatter") return undefined;
+  return parsed.columns.find((c) => c.type === "category" || c.type === "date");
+}
 
 export function formatTitleWithUnit(name: string, unit?: string): string {
   if (!unit || !name) return name;
@@ -27,11 +44,10 @@ export function resolveTitle(detection: Detection, parsed: ParsedCsv, sourceTitl
 
 export function mixedUnitsNote(detection: Detection): string | null {
   if (detection.type === "scatter" || detection.yColumns.length <= 1) return null;
-  const distinctUnits = Array.from(
-    new Set(detection.yColumns.map((c) => c.unit).filter((u): u is string => Boolean(u)))
-  );
-  if (distinctUnits.length <= 1) return null;
-  return `Multi-series chart contains mixed units (${distinctUnits.join(", ")}) on the same axis — values may differ significantly in scale.`;
+  const distinctRaw = Array.from(new Set(detection.yColumns.map((c) => c.unit ?? "")));
+  if (distinctRaw.length <= 1) return null;
+  const displayUnits = distinctRaw.map((u) => u || "no unit");
+  return `Multi-series chart contains mixed units (${displayUnits.join(", ")}) on the same axis — values may differ significantly in scale.`;
 }
 
 export function collectNotes(parsed: ParsedCsv, detection: Detection): string[] {
@@ -41,6 +57,12 @@ export function collectNotes(parsed: ParsedCsv, detection: Detection): string[] 
     const shown = detection.yColumns.length;
     lines.push(
       `Charting ${shown} of ${shown + dropped.length} numeric columns — left out: ${dropped.join(", ")}.`
+    );
+  }
+  const scatterLabelCol = findScatterLabelColumn(parsed, detection);
+  if (scatterLabelCol) {
+    lines.push(
+      `Scatter plot does not label individual points by “${scatterLabelCol.name}” on the canvas (available in the accessible data table).`
     );
   }
   const mixed = mixedUnitsNote(detection);
@@ -114,6 +136,13 @@ export function buildSrSummary(
     return `${title}: line chart with ${ptCount} time points${seriesDesc}.`;
   }
 
+  if (detection.type === "line" && detection.xColumn.type === "number") {
+    const ptCount = datasets[0]?.data?.length ?? 0;
+    const seriesDesc =
+      seriesNames.length > 0 ? ` across ${seriesNames.length} series (${seriesNames.join(", ")})` : "";
+    return `${title}: line chart with ${ptCount} points${seriesDesc}.`;
+  }
+
   const categoryCount = config.data?.labels?.length ?? 0;
   const seriesDesc =
     seriesNames.length > 0 ? ` across ${seriesNames.length} series (${seriesNames.join(", ")})` : "";
@@ -142,6 +171,14 @@ export function populateSrTable(
 
   if (detection.type === "scatter") {
     const [xc, yc] = detection.yColumns;
+    const labelCol = findScatterLabelColumn(parsed, detection);
+    if (labelCol) {
+      const thLabel = document.createElement("th");
+      thLabel.scope = "col";
+      thLabel.textContent = labelCol.name;
+      headerRow.appendChild(thLabel);
+    }
+
     const thX = document.createElement("th");
     thX.scope = "col";
     thX.textContent = formatTitleWithUnit(xc.name, xc.unit);
@@ -155,15 +192,68 @@ export function populateSrTable(
     thead.appendChild(headerRow);
     tableEl.appendChild(thead);
 
+    const validRows: number[] = [];
+    if (labelCol) {
+      for (let r = 0; r < parsed.rowCount; r++) {
+        if (!Number.isNaN(xc.nums[r]) && !Number.isNaN(yc.nums[r])) validRows.push(r);
+      }
+    }
+
     const points = (config.data?.datasets?.[0]?.data ?? []) as { x: number; y: number }[];
-    for (const pt of points) {
+    for (let i = 0; i < points.length; i++) {
+      const pt = points[i];
       const tr = document.createElement("tr");
+      if (labelCol) {
+        const thRow = document.createElement("th");
+        thRow.scope = "row";
+        const origRow = validRows[i];
+        thRow.textContent = origRow !== undefined ? labelCol.raw[origRow] : "";
+        tr.appendChild(thRow);
+      }
       const tdX = document.createElement("td");
       tdX.textContent = String(pt.x);
       const tdY = document.createElement("td");
       tdY.textContent = String(pt.y);
       tr.appendChild(tdX);
       tr.appendChild(tdY);
+      tbody.appendChild(tr);
+    }
+    tableEl.appendChild(tbody);
+    return;
+  }
+
+  if (detection.type === "line" && !detection.timeAxis && detection.xColumn.type === "number") {
+    const x = detection.xColumn;
+    const thX = document.createElement("th");
+    thX.scope = "col";
+    thX.textContent = formatTitleWithUnit(x.name, x.unit);
+    headerRow.appendChild(thX);
+
+    const datasets = config.data?.datasets ?? [];
+    for (const ds of datasets) {
+      const th = document.createElement("th");
+      th.scope = "col";
+      th.textContent = ds.label ?? "";
+      headerRow.appendChild(th);
+    }
+    thead.appendChild(headerRow);
+    tableEl.appendChild(thead);
+
+    const rowCount = datasets[0]?.data?.length ?? 0;
+    for (let r = 0; r < rowCount; r++) {
+      const tr = document.createElement("tr");
+      const firstPt = (datasets[0]?.data as { x: number; y: number | null }[])[r];
+      const thRow = document.createElement("th");
+      thRow.scope = "row";
+      thRow.textContent = firstPt !== undefined ? String(firstPt.x) : "";
+      tr.appendChild(thRow);
+
+      for (const ds of datasets) {
+        const td = document.createElement("td");
+        const pt = (ds.data as { x: number; y: number | null }[])[r];
+        td.textContent = pt?.y !== null && pt?.y !== undefined ? String(pt.y) : "";
+        tr.appendChild(td);
+      }
       tbody.appendChild(tr);
     }
     tableEl.appendChild(tbody);
