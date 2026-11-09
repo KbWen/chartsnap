@@ -114,7 +114,7 @@ function serviceWorker(): Plugin {
       outDir = config.build.outDir;
     },
     closeBundle() {
-      const files = builtFiles(outDir).filter((f) => f !== "sw.js");
+      const files = builtFiles(outDir).filter((f) => f !== "sw.js" && f !== "og.png");
       const urls = ["./", ...files.map((f) => `./${f}`)];
       writeFileSync(join(outDir, "sw.js"), serviceWorkerSource(precacheVersion(outDir, files), urls));
     },

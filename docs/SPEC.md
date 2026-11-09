@@ -693,6 +693,26 @@ Synthesized from the 2026-11-02 benchmark review (Datawrapper, Financial Times, 
       - Upgrade `readFileSync` substring checks in `test/v17.test.ts` to behavioral assertions (verifying rendered `1,000,000` comma ticks in exported SVG `<text>` nodes and executing the generated SW script against mock `caches`/`fetch`).
       - **Must keep working:** All existing tests (updated only at `test/v111.test.ts:37-44` where v1.12 explicitly supersedes v1.11's mixed-CJK face-value expectation) plus new v1.12 property suites pass across all 5 presets and 3 themes; `npm run build` succeeds; PNG and SVG exports remain byte-deterministic; zero CSP violations.
 
+## v1.13 — input fidelity, keyboard velocity, dimension defense & social discoverability (confirmed 2026-11-09)
+
+Addresses real-world friction and edge robustness identified in the project audit: adds native TSV file picker support, strips invisible UTF-8 BOM markers in CSV parsing, provides fallback dimension defaults in `buildConfig` to eliminate `NaN` risk, adds `Ctrl+Enter` / `Cmd+Enter` keyboard submission to the paste area with empty-paste status feedback, and enriches `index.html` with Open Graph and Twitter Card social metadata.
+
+### Done criteria (v1.13)
+
+- [x] **TSV native file picker support (`index.html`):**
+      - `<input id="file">` adds `.tsv` and `text/tab-separated-values` to its `accept` attribute, allowing native file dialog selection of TSV files matching existing spreadsheet paste support.
+- [x] **UTF-8 BOM strip in `parseCsv` (`src/csv.ts`):**
+      - `parseCsv` strips leading `\uFEFF` before passing text to PapaParse, ensuring zero-width BOM markers from Excel or clipboard pastes never contaminate the first column's header name, chart title, or year-header checks.
+- [x] **`buildConfig` dimension defaults defense (`src/chart.ts`):**
+      - `buildConfig` defaults `width` to `opts.width ?? 1200` and `height` to `opts.height ?? 675` so partial option objects never cascade `NaN` into font scaling, geometry padding, or point radii.
+- [x] **Keyboard submission (`Ctrl+Enter` / `Cmd+Enter`) & empty-paste feedback (`src/main.ts`):**
+      - `#paste-area` listens for `(e.ctrlKey || e.metaKey) && e.key === "Enter"` to trigger immediate rendering.
+      - Submitting an empty paste area displays a polite status message (`"Please paste or enter CSV text first."`) via `.status.error` instead of a silent no-op.
+- [x] **Open Graph & Twitter Card social meta tags (`index.html`):**
+      - `index.html` defines `og:title`, `og:description`, `og:image`, `og:url`, `og:type`, and `twitter:card` pointing to `docs/hero.png` and `https://kbwen.github.io/chartsnap/` for rich social preview cards.
+- [x] **Must keep working:**
+      - All 552 existing tests pass (+ new v1.13 property tests); `npm run build` succeeds; zero CSP violations; SVG/PNG byte-determinism maintained across all presets and themes.
+
 ## Non-goals / Later / Not now
 
 - NO field/axis mapping or chart-type gallery UI (that is RAWGraphs' turf — we lose if we

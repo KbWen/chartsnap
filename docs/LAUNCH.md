@@ -37,7 +37,7 @@
       - Machado 2009 CVD simulation achieves min pairwise ΔE00 ≥ 15.0 for protanopia
         and deuteranopia on all themes; WCAG graphical contrast ≥ 3:1 across ±1 neighbourhood.
       - `npm run build` succeeds (lean static bundle); zero CSP violations.
-      - Total test suite: 552 / 552 tests green across 24 test files.
+      - Total test suite: 562 / 562 tests green across 25 test files.
 
 ## Owner handoff
 

@@ -502,7 +502,7 @@ function sampleIndices(n: number, target: number): number[] {
  * SVG's <text> nodes — one NUL in a cell makes the whole file refuse to open. Tab, newline
  * and carriage return are legal and stay.
  */
-const XML_ILLEGAL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
+const XML_ILLEGAL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFEFF]/g;
 export const scrub = (s: string): string => s.replace(XML_ILLEGAL, "");
 
 const LOOKS_DATE_LIKE = new RegExp(
@@ -546,7 +546,8 @@ export function parseCsv(text: string): ParsedCsv {
   // Strip trailing newlines so PapaParse's delimiter detection isn't tricked by a
   // trailing empty row into seeing an average field count < 1.99 (which fails TSV guessing
   // for 2-column Excel clipboard copies). Blank lines are filtered downstream.
-  const input = text.replace(/[\r\n]+$/, "");
+  const cleanText = text.replace(/^\uFEFF/, "");
+  const input = cleanText.replace(/[\r\n]+$/, "");
 
   const result = Papa.parse<string[]>(input, {
     header: false,

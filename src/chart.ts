@@ -101,8 +101,8 @@ function tickUnit(times: number[]): "day" | "month" | "quarter" | "year" | undef
 export interface BuildOpts {
   title?: string;
   /** Target pixel size; used to scale fonts so large exports stay legible. */
-  width: number;
-  height: number;
+  width?: number;
+  height?: number;
   /**
    * The export preset's width, when `width` is a downscaled preview of it. Type is sized from
    * the preset and then scaled by the preview's own factor, so the preview's font-to-image
@@ -133,7 +133,9 @@ export function buildConfig(
 
   // Geometry — padding, point radius, rule widths, bar caps — keeps the short-edge scale it
   // was tuned against, and looks right.
-  const scale = clamp(Math.min(opts.width, opts.height) / 700, 1, 4);
+  const width = opts.width ?? 1200;
+  const height = opts.height ?? 675;
+  const scale = clamp(Math.min(width, height) / 700, 1, 4);
   const px = (n: number) => Math.round(n * scale);
 
   // Type gets its own, because only type has to survive being *posted*. Keying it off the
@@ -150,8 +152,8 @@ export function buildConfig(
   // Type and geometry were one scale until 2026-07-16, and sharing it is a trap: raising it
   // for legibility inflated the dots and rules too and turned a restrained chart chunky. The
   // numbers said 2% and looked fine; the rendered PNG did not.
-  const basis = opts.basis ?? opts.width;
-  const fontScale = clamp(basis / 600, 1, 4) * (opts.width / basis);
+  const basis = opts.basis ?? width;
+  const fontScale = clamp(basis / 600, 1, 4) * (width / basis);
   const fpx = (n: number) => Math.round(n * fontScale);
   const font = {
     title: fpx(25),

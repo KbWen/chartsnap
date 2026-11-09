@@ -331,7 +331,18 @@ bindDropzoneEvents(dropEl, window, handleFile);
 // paste: explicit textarea render
 pasteRender.addEventListener("click", () => {
   const text = pasteArea.value;
-  if (text.trim()) handleText(text);
+  if (text.trim()) {
+    handleText(text);
+  } else {
+    showStatus("Please paste or enter CSV text first.", "error");
+  }
+});
+
+pasteArea.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+    e.preventDefault();
+    pasteRender.click();
+  }
 });
 
 // paste: anywhere on the page (unless typing into an input/textarea)

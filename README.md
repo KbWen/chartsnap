@@ -112,7 +112,7 @@ Accessible by design: the dropzone is a keyboard-interactive button, chart title
 
 Vite and vanilla TypeScript, [Chart.js](https://www.chartjs.org/) for drawing, [PapaParse](https://www.papaparse.com/) for the CSV, and [canvas2svg](https://github.com/gliffy/canvas2svg) for the vector export. No backend; it ships as static files to GitHub Pages. Zero analytics, zero cookies, zero third-party scripts.
 
-`npm test` runs 552 tests across 24 suites, covering column auto-detection, horizontal bar label preservation, continuous numeric X-axes, time-axis synchronization, CJK magnitude scaling, responsive SVG serialization, CVD & WCAG contrast tripwires, negative controls, zero-trust prototype pollution defense, and multi-target PNG exports.
+`npm test` runs 562 tests across 25 suites, covering column auto-detection, horizontal bar label preservation, continuous numeric X-axes, time-axis synchronization, CJK magnitude scaling, responsive SVG serialization, CVD & WCAG contrast tripwires, negative controls, zero-trust prototype pollution defense, UTF-8 BOM sanitization, keyboard velocity, and multi-target PNG exports.
 
 ## License
 
