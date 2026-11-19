@@ -88,7 +88,7 @@ Messy real-world spreadsheet exports:
 - **Numbers**: quoted commas, US and European numbers (`1,234.56` and `1.234,56`, decided per column).
 - **Dates**: `2025-01-05`, `2025.01.05` (year-first dot dates), `2025-01`, `2025/01/05`, quarters (`2025-Q1`, `2025 Q1`, `Q1 2025`), `2025-01-01T09:30:00Z` (and with an offset), `2025-01-01 09:30`, `March 2025`, `5 January 2025`, `Jan 5, 2025`, and 4-digit years under a `year` header. Bare calendar dates mean the same day in every timezone.
 - **Spreadsheet copies**: Excel and Google Sheets TSV pasted straight onto the page.
-- **Blank cells & large files**: blank cells are drawn as gaps; files over 1,000 rows are sampled down with an explanatory note.
+- **Blank cells & large files**: blank cells are drawn as gaps; files over 1,000 rows are min-max downsampled after full-dataset classification to preserve peaks, lows, and number/unit format detection, with an explanatory note.
 - **Encoding fallbacks**: Big5 or Latin-1 exports still chart, with an honest note explaining why labels came out as `�` and to re-save as UTF-8. It won't refuse your file: it can't reliably tell a whole mis-encoded export from two stray bytes in a good one, so it says what it saw and lets you decide.
 
 Dates chartsnap does not read: anything ambiguous — `01/02/2025`, `Jan-25`, `114/01/05` — is treated as text rather than guessed at, because the guesses were silently wrong (`Jan-25` used to chart as 25 January **2001**).
@@ -112,7 +112,7 @@ Accessible by design: the dropzone is a keyboard-interactive button, chart title
 
 Vite and vanilla TypeScript, [Chart.js](https://www.chartjs.org/) for drawing, [PapaParse](https://www.papaparse.com/) for the CSV, and [canvas2svg](https://github.com/gliffy/canvas2svg) for the vector export. No backend; it ships as static files to GitHub Pages. Zero analytics, zero cookies, zero third-party scripts.
 
-`npm test` runs 562 tests across 25 suites, covering column auto-detection, horizontal bar label preservation, continuous numeric X-axes, time-axis synchronization, CJK magnitude scaling, responsive SVG serialization, CVD & WCAG contrast tripwires, negative controls, zero-trust prototype pollution defense, UTF-8 BOM sanitization, keyboard velocity, and multi-target PNG exports.
+`npm test` runs 576 tests across 26 suites, covering column auto-detection, extrema-preserving min-max downsampling, horizontal bar label preservation, continuous numeric X-axes, time-axis synchronization, CJK magnitude scaling, responsive SVG serialization, CVD & WCAG contrast tripwires, negative controls, zero-trust prototype pollution defense, UTF-8 BOM sanitization, keyboard velocity, and multi-target PNG exports.
 
 ## License
 

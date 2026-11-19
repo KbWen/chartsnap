@@ -713,6 +713,31 @@ Addresses real-world friction and edge robustness identified in the project audi
 - [x] **Must keep working:**
       - All 552 existing tests pass (+ new v1.13 property tests); `npm run build` succeeds; zero CSP violations; SVG/PNG byte-determinism maintained across all presets and themes.
 
+## v1.14 — extrema-preserving downsampling & full-dataset classification (confirmed 2026-11-19)
+
+Fixes two empirically reproduced silent-wrong-chart defects on CSVs larger than `MAX_POINTS` (1,000 rows), both caused by running naive uniform stride sampling (`sampleIndices`) *before* column classification (`src/csv.ts`):
+1. **Silent extremum erasure:** On a 5,000-row hourly latency series (`40–49 ms` baseline) containing a `950 ms` outage spike (row 1234) and a `0 ms` drop (row 3457), current stride sampling drops both (`maxKept = 49`, `minKept = 40`), rendering a smooth flat line with no hint that an outage occurred.
+2. **Silent 1,000× format misclassification:** On a 1,500-row European CSV where row 777 is `12,5` and all other rows are `3.850`, stride sampling discards row 777 before `detectNumberStyle()` runs, misreading every `3.850` as `3.85` instead of `3,850`.
+
+### Done criteria (v1.14)
+
+- [x] **Classify full dataset before downsampling (`src/csv.ts`):**
+      - Run `classify()` (number-style detection, CJK magnitude normalization, date/year/quarter classification, mixed-format/unit/unread-date notes) on all rows *before* downsampling, eliminating format/unit/date blindness on non-stride rows (e.g. a lone `12,5` or `2億元` cell at row 777 of 1,500).
+      - Avoid redundant per-cell `cleanNumberString()` calls inside `classify()` (compute cleaned cells once and reuse across `detectNumberStyle()` and numeric parsing) so full-dataset classification on a 50,000-row CSV stays fast without adding any runtime dependency.
+- [x] **Deterministic per-bucket Min-Max envelope downsampling (`src/csv.ts`):**
+      - When `rowCount > MAX_POINTS` (1,000), select exactly `MAX_POINTS` distinct row indices deterministically, preserving:
+        1. First and last rows (`0` and `N - 1`), plus chronological endpoints when a `date` column is present.
+        2. Per-bucket exact minimum and maximum row indices across all plotted numeric columns (up to `MAX_SERIES + 1` so both standard `MAX_SERIES` charts and forced continuous-X line charts are covered), bucketed in chronological order when a `date` column exists (or continuous X order for purely numeric multi-column tables, else original row order), skipping `NaN` values without letting them corrupt bucket ordering.
+        3. Deterministic evenly-spaced fill of remaining budget up to `MAX_POINTS` when flat/constant or all-`NaN` buckets emit fewer than `2 * K` distinct indices, then sort final kept indices in ascending original row order.
+      - Update the large-file note to accurately describe min-max downsampling while still matching `/sampled/i` (e.g. `"Large file: showing 1000 of 5000 rows (min-max downsampled to preserve peaks and lows)."`).
+- [x] **Property-based verification & negative controls across all output targets (`test/v114.test.ts`):**
+      - Assert mathematically on 1-series, 6-series, reverse-chronological, shuffled-date, NaN-gapped, and constant-value >1,000-row CSVs: `p.rowCount === MAX_POINTS`, exact endpoints preserved, and for **every** plotted numeric column `Math.min(...kept) === Math.min(...full)` and `Math.max(...kept) === Math.max(...full)`.
+      - Assert on the 1,500-row EU CSV (`12,5` at row 777, `3.850` elsewhere) that every `3.850` parses as `3850` (not `3.85`) and `12.5` survives in the downsampled dataset; assert on a 1,500-row CJK mixed-magnitude CSV (`2億元` at row 777 among `50萬元` rows) that normalization runs and the `2億元` peak survives.
+      - Assert on the **exported SVG** (across presets) and **`#sr-table`** for the 5,000-row `950 ms` spike / `0 ms` drop CSV that Y-axis `<text>` ticks reach `>= 900` and `950` & `0` are present in `#sr-table` (with a negative control confirming naive uniform stride fails both).
+      - Assert determinism: parsing and exporting the same 5,000-row CSV twice yields byte-identical SVG output.
+- [x] **Must keep working:**
+      - All 562 existing tests pass (+ new v1.14 property tests); files with `<= MAX_POINTS` rows are completely untouched (byte-identical PNG & SVG across all samples, presets, and themes); `npm run build` succeeds; zero CSP violations; `README.md` updated to mention peak/low-preserving downsampling.
+
 ## Non-goals / Later / Not now
 
 - NO field/axis mapping or chart-type gallery UI (that is RAWGraphs' turf — we lose if we

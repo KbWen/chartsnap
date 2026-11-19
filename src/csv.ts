@@ -1,7 +1,8 @@
 import Papa from "papaparse";
+import { MAX_SERIES } from "./detect";
 import type { Column, ColumnType, ParsedCsv } from "./types";
 
-/** Above this many data rows we evenly downsample so charts stay legible & fast. */
+/** Above this many data rows we min-max downsample so charts stay legible, fast, and peak-faithful. */
 export const MAX_POINTS = 1000;
 
 /** A cell counts as this type if at least this fraction of non-empty cells match. */
@@ -200,7 +201,7 @@ interface NumberStyle {
  * separator cannot be both a decimal point and a thousands mark in the same column, so
  * one proven cell settles every other cell that uses it.
  */
-function detectNumberStyle(raw: string[]): NumberStyle {
+function detectNumberStyle(cells: CleanedNumber[]): NumberStyle {
   let dotDecimal: string | undefined; // 1.25, 0.125, 1234.567, 1,234.56
   let dotGrouping: string | undefined; // 1.234.567, 1.234,56
   let commaDecimal: string | undefined; // 12,5, 1234,567, 1.234,56
@@ -211,8 +212,7 @@ function detectNumberStyle(raw: string[]): NumberStyle {
 
   const unitCounts = new Map<string, number>();
 
-  for (const cell of raw) {
-    const { cleaned, unit } = cleanNumberString(cell);
+  for (const { cleaned, unit } of cells) {
     if (!cleaned || !VALID_NUM_RE.test(cleaned)) continue;
     if (unit) unitCounts.set(unit, (unitCounts.get(unit) ?? 0) + 1);
     if (EU_SCI_RE.test(cleaned)) {
@@ -285,13 +285,16 @@ function detectNumberStyle(raw: string[]): NumberStyle {
 const US_GROUPING = /,(?=\d{3}([.,]|$))/g;
 const EU_GROUPING = /\.(?=\d{3}([.,]|$))/g;
 
-function toNumber(s: string, format: NumberFormat): number {
-  const { cleaned } = cleanNumberString(s);
+function toNumberFromCleaned(cleaned: string, format: NumberFormat): number {
   if (cleaned === "" || !VALID_NUM_RE.test(cleaned)) return NaN;
   const plain =
     format === "eu" ? cleaned.replace(EU_GROUPING, "").replace(",", ".") : cleaned.replace(US_GROUPING, "");
   const n = Number(plain);
   return Number.isFinite(n) ? n : NaN;
+}
+
+function toNumber(s: string, format: NumberFormat): number {
+  return toNumberFromCleaned(cleanNumberString(s).cleaned, format);
 }
 
 function numberWarning(column: string, style: NumberStyle): string | null {
@@ -436,10 +439,10 @@ function classify(
   unit?: string;
   normalizedUnit?: string;
 } {
-  const style = detectNumberStyle(raw);
-  const bareYearOk = isYearHeader(name);
   const cellClean = raw.map((v) => cleanNumberString(v));
-  let nums = raw.map((v) => toNumber(v, style.format));
+  const style = detectNumberStyle(cellClean);
+  const bareYearOk = isYearHeader(name);
+  let nums = cellClean.map((c) => toNumberFromCleaned(c.cleaned, style.format));
   const times = raw.map((v) => cleanTime(v, bareYearOk));
   const nonEmpty = raw.filter((v) => !isMissingValue(v)).length;
   // Only a column made *entirely* of bare years earns a year-ticked axis.
@@ -495,6 +498,119 @@ function sampleIndices(n: number, target: number): number[] {
   const step = (n - 1) / (target - 1);
   for (let i = 0; i < target; i++) out.push(Math.round(i * step));
   return Array.from(new Set(out));
+}
+
+/**
+ * Deterministic per-bucket Min-Max envelope downsampling across plotted numeric columns.
+ * Buckets traverse chronological order when a date column is present (or continuous X order
+ * for purely numeric multi-column data, else original row order) and keep exact bucket
+ * extrema plus endpoints, then fill any remaining budget evenly up to `target`.
+ */
+function minMaxSampleIndices(
+  columns: Column[],
+  rowCount: number,
+  target: number
+): { indices: number[]; usedMinMax: boolean } {
+  if (rowCount <= target) {
+    return { indices: Array.from({ length: rowCount }, (_, i) => i), usedMinMax: false };
+  }
+
+  const numCols = columns.filter((c) => c.type === "number").slice(0, MAX_SERIES + 1);
+  if (numCols.length === 0) {
+    return { indices: sampleIndices(rowCount, target), usedMinMax: false };
+  }
+
+  const dateCol = columns.find((c) => c.type === "date");
+  const hasCategory = columns.some((c) => c.type === "category");
+
+  let primaryOrder: number[];
+  let fallbackOrder: number[] = [];
+  let validFirst: number | undefined;
+  let validLast: number | undefined;
+
+  if (dateCol) {
+    const valid: number[] = [];
+    const invalid: number[] = [];
+    for (let i = 0; i < rowCount; i++) {
+      if (!Number.isNaN(dateCol.times[i])) valid.push(i);
+      else invalid.push(i);
+    }
+    valid.sort((a, b) => dateCol.times[a] - dateCol.times[b] || a - b);
+    primaryOrder = valid.length > 0 ? valid : invalid;
+    fallbackOrder = valid.length > 0 ? invalid : [];
+    validFirst = valid[0];
+    validLast = valid[valid.length - 1];
+  } else if (!hasCategory && numCols.length >= 2) {
+    const valid: number[] = [];
+    const invalid: number[] = [];
+    for (let i = 0; i < rowCount; i++) {
+      if (!Number.isNaN(numCols[0].nums[i])) valid.push(i);
+      else invalid.push(i);
+    }
+    valid.sort((a, b) => numCols[0].nums[a] - numCols[0].nums[b] || a - b);
+    primaryOrder = valid.length > 0 ? valid : invalid;
+    fallbackOrder = valid.length > 0 ? invalid : [];
+    validFirst = valid[0];
+    validLast = valid[valid.length - 1];
+  } else {
+    primaryOrder = Array.from({ length: rowCount }, (_, i) => i);
+  }
+
+  const chosen = new Set<number>([0, rowCount - 1]);
+  if (validFirst !== undefined) chosen.add(validFirst);
+  if (validLast !== undefined) chosen.add(validLast);
+
+  const remaining = target - chosen.size;
+  const k = numCols.length;
+  const bucketCount = Math.max(1, Math.floor(remaining / (2 * k)));
+
+  // Bucket strictly over plottable (valid-X) rows so unplottable NaN-date / NaN-X rows
+  // can never shadow a real plotted peak or trough in a boundary bucket.
+  for (let b = 0; b < bucketCount; b++) {
+    const start = Math.floor((b * primaryOrder.length) / bucketCount);
+    const end = Math.floor(((b + 1) * primaryOrder.length) / bucketCount);
+    if (start >= end) continue;
+
+    for (const col of numCols) {
+      let minVal = Infinity;
+      let maxVal = -Infinity;
+      let minIdx = -1;
+      let maxIdx = -1;
+      for (let p = start; p < end; p++) {
+        const r = primaryOrder[p];
+        const v = col.nums[r];
+        if (Number.isNaN(v)) continue;
+        if (v < minVal) {
+          minVal = v;
+          minIdx = r;
+        }
+        if (v > maxVal) {
+          maxVal = v;
+          maxIdx = r;
+        }
+      }
+      if (minIdx !== -1 && chosen.size < target) chosen.add(minIdx);
+      if (maxIdx !== -1 && chosen.size < target) chosen.add(maxIdx);
+    }
+  }
+
+  const fillFrom = (pool: number[]) => {
+    if (chosen.size >= target) return;
+    const unchosen = pool.filter((idx) => !chosen.has(idx));
+    const need = target - chosen.size;
+    if (unchosen.length <= need) {
+      for (const idx of unchosen) chosen.add(idx);
+    } else {
+      const step = unchosen.length / need;
+      for (let i = 0; i < need; i++) {
+        chosen.add(unchosen[Math.floor((i + 0.5) * step)]);
+      }
+    }
+  };
+  fillFrom(primaryOrder);
+  fillFrom(fallbackOrder);
+
+  return { indices: Array.from(chosen).sort((a, b) => a - b), usedMinMax: true };
 }
 
 /**
@@ -653,13 +769,7 @@ export function parseCsv(text: string): ParsedCsv {
   }
 
   const originalRowCount = body.length;
-  let sampled = false;
-  if (body.length > MAX_POINTS) {
-    const idx = sampleIndices(body.length, MAX_POINTS);
-    body = idx.map((i) => body[i]);
-    sampled = true;
-    notes.push(`Large file: showing ${body.length} of ${originalRowCount} rows (evenly sampled).`);
-  }
+  const preColumnNoteIdx = notes.length;
 
   const columns: Column[] = header.map((name, c) => {
     const raw = body.map((row) => row[c] ?? "");
@@ -693,9 +803,26 @@ export function parseCsv(text: string): ParsedCsv {
     return { name, type, raw, nums, times, bareYears, quarterAxis, unit };
   });
 
+  let rowCount = originalRowCount;
+  let sampled = false;
+  if (originalRowCount > MAX_POINTS) {
+    const { indices, usedMinMax } = minMaxSampleIndices(columns, originalRowCount, MAX_POINTS);
+    for (const col of columns) {
+      col.raw = indices.map((i) => col.raw[i]);
+      col.nums = col.nums.length ? indices.map((i) => col.nums[i]) : [];
+      col.times = col.times.length ? indices.map((i) => col.times[i]) : [];
+    }
+    rowCount = indices.length;
+    sampled = true;
+    const largeNote = usedMinMax
+      ? `Large file: showing ${indices.length} of ${originalRowCount} rows (min-max downsampled to preserve peaks and lows).`
+      : `Large file: showing ${indices.length} of ${originalRowCount} rows (evenly sampled).`;
+    notes.splice(preColumnNoteIdx, 0, largeNote);
+  }
+
   return {
     columns,
-    rowCount: body.length,
+    rowCount,
     originalRowCount: sampled ? originalRowCount : undefined,
     notes,
     extractedTitle,
