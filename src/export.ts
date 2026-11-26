@@ -197,10 +197,11 @@ export function renderSvgString(
     }
     // Inject an opaque background as the first child (document order = behind),
     // matching the raster export's theme background.
-    const safeBg = activeTheme.bg.replace(/["<>&]/g, "");
+    const safeBg = activeTheme.bg.replace(/["'<>&]/g, "");
     const withBg = svgWithViewBox.replace(
       /(<svg[^>]*>)/,
-      `$1<rect x="0" y="0" width="${Math.round(preset.width)}" height="${Math.round(preset.height)}" fill="${safeBg}"/>`
+      (_, open: string) =>
+        `${open}<rect x="0" y="0" width="${Math.round(preset.width)}" height="${Math.round(preset.height)}" fill="${safeBg}"/>`
     );
     return stableClipIds(withBg);
   } finally {

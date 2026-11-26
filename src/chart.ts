@@ -79,7 +79,7 @@ const DAY_MS = 86_400_000;
  * has nothing on, which is a regression wearing a fix's clothes.
  */
 function tickUnit(times: number[]): "day" | "month" | "quarter" | "year" | undefined {
-  const sorted = times.filter((t) => !Number.isNaN(t)).sort((a, b) => a - b);
+  const sorted = [...new Set(times.filter((t) => !Number.isNaN(t)))].sort((a, b) => a - b);
   if (sorted.length < 2) return undefined;
   const gaps: number[] = [];
   for (let i = 1; i < sorted.length; i++) gaps.push(sorted[i] - sorted[i - 1]);
@@ -133,8 +133,14 @@ export function buildConfig(
 
   // Geometry — padding, point radius, rule widths, bar caps — keeps the short-edge scale it
   // was tuned against, and looks right.
-  const width = opts.width ?? 1200;
-  const height = opts.height ?? 675;
+  const width =
+    typeof opts.width === "number" && Number.isFinite(opts.width) && opts.width > 0
+      ? opts.width
+      : 1200;
+  const height =
+    typeof opts.height === "number" && Number.isFinite(opts.height) && opts.height > 0
+      ? opts.height
+      : 675;
   const scale = clamp(Math.min(width, height) / 700, 1, 4);
   const px = (n: number) => Math.round(n * scale);
 
@@ -152,7 +158,10 @@ export function buildConfig(
   // Type and geometry were one scale until 2026-07-16, and sharing it is a trap: raising it
   // for legibility inflated the dots and rules too and turned a restrained chart chunky. The
   // numbers said 2% and looked fine; the rendered PNG did not.
-  const basis = opts.basis ?? width;
+  const basis =
+    typeof opts.basis === "number" && Number.isFinite(opts.basis) && opts.basis > 0
+      ? opts.basis
+      : width;
   const fontScale = clamp(basis / 600, 1, 4) * (width / basis);
   const fpx = (n: number) => Math.round(n * fontScale);
   const font = {

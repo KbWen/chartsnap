@@ -97,14 +97,16 @@ export function bindDropzoneEvents(
       dropEl.classList.add("dragging");
     })
   );
-  ["dragleave", "drop"].forEach((ev) =>
-    dropEl.addEventListener(ev, (e) => {
-      e.preventDefault();
-      dropEl.classList.remove("dragging");
-    })
-  );
+  dropEl.addEventListener("dragleave", (e) => {
+    e.preventDefault();
+    const related = (e as DragEvent).relatedTarget as Node | null;
+    if (related && dropEl.contains(related)) return;
+    dropEl.classList.remove("dragging");
+  });
   dropEl.addEventListener("drop", (e) => {
+    e.preventDefault();
     e.stopPropagation();
+    dropEl.classList.remove("dragging");
     const f = (e as DragEvent).dataTransfer?.files?.[0];
     if (f) onFile(f);
   });

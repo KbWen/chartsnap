@@ -124,7 +124,7 @@ export function cleanNumberString(s: string): CleanedNumber {
   // 3. Extract currency prefix: $500 or $(500) or NTD 1,200
   const prefixMatch = CURRENCY_PREFIX.exec(t);
   if (prefixMatch) {
-    prefixUnit = prefixMatch[0].trim();
+    prefixUnit = prefixMatch[0].trim().toUpperCase();
     t = t.slice(prefixMatch[0].length).trim();
   }
 
@@ -140,7 +140,7 @@ export function cleanNumberString(s: string): CleanedNumber {
   let suffixUnit: string | undefined;
   const suffixMatch = UNIT_SUFFIX.exec(t);
   if (suffixMatch) {
-    suffixUnit = suffixMatch[0].trim();
+    suffixUnit = suffixMatch[0].trim().toUpperCase();
     t = t.slice(0, t.length - suffixMatch[0].length).trim();
   }
 
@@ -374,7 +374,7 @@ const PARSEABLE: RegExp[] = [
  * from 2018 purely because it falls outside the plausible-year window.
  */
 const YEAR_EN =
-  /^(?!.*(?:^|[^a-z])(?:over|vs|versus|per|to)(?:[^a-z]|$))(?!(?:last|this|next|prior|prev|previous|past)(?:[^a-z]|$))(?:.*[_\s-])?(?:year|yr|years)(?:\s*\([^)]*\)|\s*[_-]?\d+)?$/i;
+  /^(?!.*(?:^|[^a-z])(?:over|vs|versus|per|to|last|this|next|prior|prev|previous|past)(?:[^a-z]|$))(?:.*[_\s-])?(?:year|yr|years)(?:\s*\([^)]*\)|\s*[_-]?\d+)?$/i;
 const YEAR_ZH =
   /^(?!.*(?:去年|今年|明年|前年|歷年|全年|半年))[\u4e00-\u9fffA-Za-z0-9_\s-]*?年(?:份|度(?:別)?)?(?:\s*[\(（][^\)）]*[\)）]|\s*[_-]?\d+)?$/;
 export function isYearHeader(name: string): boolean {
@@ -422,6 +422,17 @@ function cleanTime(s: string, bareYearOk: boolean): number {
   if (/^-?\d+(\.\d+)?$/.test(t)) return NaN;
   // Everything else must look like something we recognise before Date.parse may guess at it.
   if (!PARSEABLE.some((re) => re.test(t))) return NaN;
+  // Reject impossible calendar dates (e.g. 2025/02/31, 2025-02-31T09:30:00Z) before V8 Date.parse rolls them over.
+  const ymd = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:$|[T ])/i.exec(t);
+  if (ymd) {
+    const year = Number(ymd[1]);
+    const month = Number(ymd[2]) - 1;
+    const day = Number(ymd[3]);
+    const d = new Date(year, month, day);
+    if (d.getFullYear() !== year || d.getMonth() !== month || d.getDate() !== day) {
+      return NaN;
+    }
+  }
   const ms = Date.parse(t);
   return Number.isNaN(ms) ? NaN : ms;
 }

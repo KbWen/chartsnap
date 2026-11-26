@@ -738,6 +738,22 @@ Fixes two empirically reproduced silent-wrong-chart defects on CSVs larger than 
 - [x] **Must keep working:**
       - All 562 existing tests pass (+ new v1.14 property tests); files with `<= MAX_POINTS` rows are completely untouched (byte-identical PNG & SVG across all samples, presets, and themes); `npm run build` succeeds; zero CSP violations; `README.md` updated to mention peak/low-preserving downsampling.
 
+## v1.14.1 — empirical audit bug fixes (2026-11-26)
+
+Fixes 8 empirically reproduced defects against existing SPEC invariants across date/number parsing, time-axis ticking, export hardening, and UI interaction resilience (no scope expansion, zero new dependencies).
+
+### Done criteria (v1.14.1)
+
+- [x] **`isYearHeader` rejects relative/comparative qualifiers anywhere in English headers (`src/csv.ts`):** `sales_last_year`, `revenue_this_year`, `profit_prior_year`, `bonus_next_year`, `cost_prev_year`, `metric_past_year` stay numeric instead of hijacking the time axis or throwing `DetectError`. Valid year headers (`year`, `fiscal_year`, `Year (AD)`, `year_2025`, `年份`) remain accepted.
+- [x] **Impossible calendar dates rejected before `Date.parse` rollover (`src/csv.ts`):** `2025/02/31`, `2025/04/31`, `2025-02-31 09:30:00`, `2025-02-31T09:30:00Z`, and `2025-02-31t09:30:00z` return `NaN` instead of silently rolling into March/May; leap days (`2024/02/29`, `2024-02-29T09:30:00Z`) and all 26 exporter shapes keep working.
+- [x] **Case-insensitive currency unit canonicalization (`src/csv.ts`):** `USD`/`usd` and `NT$`/`nt$` unify to uppercase in `cleanNumberString`, eliminating false mixed-unit warnings and cleared axis units.
+- [x] **Duplicate timestamps keep their true time-axis unit (`src/chart.ts`):** `tickUnit()` deduplicates timestamps before computing median gaps, so repeated monthly/daily timestamps retain `"month"`/`"day"` units and 100% on-data ticks across all 5 presets.
+- [x] **Positive-dimension guard in `buildConfig` (`src/chart.ts`):** zero, negative, or non-finite `width`/`height`/`basis` values fall back safely without cascading `NaN` or `Infinity` into font sizes.
+- [x] **Hardened SVG background injection (`src/export.ts`):** `renderSvgString` strips `'` from `theme.bg` and uses a replacer callback so `$&` patterns cannot inject markup.
+- [x] **Async `FileReader` race cancellation & single-parse global paste (`src/main.ts`):** non-file loads (sample clicks, paste, `__cs.load`) increment `fileLoadSeq` to cancel stale `FileReader` callbacks; global `paste` parses/detects once, stays inert on failures, and ignores `contentEditable` targets.
+- [x] **Dropzone `dragleave` flicker fix (`src/a11y.ts`):** `bindDropzoneEvents` ignores `dragleave` transitions into child elements of `#drop` and consolidates drop handling into a single listener.
+- [x] **Must keep working:** All 576 existing tests pass (+21 new tests in `test/audit-fixes.test.ts`, 597 total across 27 suites); `npm run build` succeeds.
+
 ## Non-goals / Later / Not now
 
 - NO field/axis mapping or chart-type gallery UI (that is RAWGraphs' turf — we lose if we
@@ -748,6 +764,18 @@ Fixes two empirically reproduced silent-wrong-chart defects on CSVs larger than 
 - Later (surfaced by the review — see DECISIONS): sort categorical bars by value +
   ~~horizontal bars for long labels~~ (**shipped in v1.12**); aggregate (sum/count) categorical data instead of
   plotting/sampling raw rows; data labels on bars.
+
+### Backlog from 2026-11-26 empirical review (deferred — needs scope decision before speccing)
+
+All items below were reproduced empirically on 2026-11-26 and deliberately deferred to backlog rather than bundled into v1.14.1:
+- **Excel accounting zero (`$ -`, `NT$ -`, `€ -`):** Remainder `"-"` fails `VALID_NUM_RE` and `isMissingValue`, so ≥20% zero rows drop the whole numeric column to `category`. Needs scope call: treat as `0` vs missing (`NaN`).
+- **Unicode minus sign `−` (`U+2212`):** Not converted to ASCII `-` by `NFKC`; negative numbers pasted from Wikipedia/Notion/Apple Numbers (`−10`, `−5.5`) fail numeric parsing.
+- **Leading-dot decimals (`.312`, `-.25`, `$.99`, `.5%`):** `VALID_NUM_RE` requires a leading `\d`, so omitting the leading zero drops the column to `category`.
+- **CJK visual label width for horizontal bars:** `maxLabelLen > 16` counts UTF-16 code units rather than visual width (~2× for CJK), so 8 Chinese categories of 10–16 chars stay vertical instead of switching to horizontal bars.
+- **Isolated non-null points on `>12`-row line charts:** With `pointRadius: 0` and `spanGaps: false`, a single non-null value surrounded by `N/A` gaps draws 0 pixels; needs per-point radius for isolated points.
+- **Multi-year daily/weekly axis labels:** `date-adapter.ts` formats `day` as `"MMM d"` with no year, making 2+ year daily/weekly charts show ambiguous repeated month-day ticks.
+- **Ragged 1-column row 0 title extraction:** `rows[0].length === 1` sets `row1LooksLikeHeader = true` unconditionally, so `item\nApples,30\nPears,45` promotes `Apples,30` to headers and drops row 1.
+- *(Already tracked below)* Offline hanging-connection / captive-portal SW timeout race; devDependencies-only CVE upgrades (runtime `--omit=dev` has 0 vulnerabilities).
 
 ### Found by the 2026-07-16 review (12 reviewers: 6 expert lenses + 6 user personas; historical backlog — most items shipped in v1.5–v1.12 as noted below)
 

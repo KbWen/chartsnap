@@ -160,10 +160,10 @@ function showNotes(parsed: ParsedCsv, detection: Detection): void {
 function render(
   parsed: ParsedCsv,
   sourceTitle?: string,
-  opts: { silent?: boolean; skipScroll?: boolean; sampleKey?: string } = {}
+  opts: { silent?: boolean; skipScroll?: boolean; sampleKey?: string; preDetected?: Detection } = {}
 ): void {
   // A new dataset always starts from a fresh auto-detection (the toggle re-syncs below).
-  const detection = detectChart(parsed); // may throw DetectError
+  const detection = opts.preDetected ?? detectChart(parsed); // may throw DetectError
   const cleanSource = sourceTitle?.trim() || undefined;
   const title = resolveTitle(detection, parsed, cleanSource);
   state = { parsed, detection, title, sourceTitle: cleanSource };
@@ -262,12 +262,17 @@ themeToggleEl.addEventListener("click", (e) => {
 const UNDECODABLE_NOTE =
   "Some characters didn't decode as UTF-8 — any label showing “\uFFFD” is one of them. If the whole chart looks garbled, re-save the file as UTF-8 CSV (most spreadsheets: “Save As → CSV UTF-8”).";
 
+let fileLoadSeq = 0;
+
 function handleText(
   text: string,
   sourceTitle?: string,
   extraNotes: string[] = [],
-  opts: { silent?: boolean; skipScroll?: boolean; sampleKey?: string } = {}
+  opts: { silent?: boolean; skipScroll?: boolean; sampleKey?: string; keepFileSeq?: boolean } = {}
 ): void {
+  if (!opts.keepFileSeq) {
+    fileLoadSeq++;
+  }
   try {
     const parsed = parseCsv(text);
     // Ahead of the parser's own notes: if the labels are mojibake, that's the first thing to say.
@@ -291,8 +296,6 @@ function handleText(
   }
 }
 
-let fileLoadSeq = 0;
-
 function handleFile(file: File): void {
   const reqId = ++fileLoadSeq;
   const reader = new FileReader();
@@ -308,7 +311,7 @@ function handleFile(file: File): void {
     // ignorable line, and a true positive still gets the message. Mojibake is self-announcing
     // anyway — “���,�禬” on an axis is not a chart anyone posts by mistake.
     const base = scrub(file.name.replace(/\.[^.]+$/, ""));
-    handleText(text, base, looksNonUtf8 ? [UNDECODABLE_NOTE] : []);
+    handleText(text, base, looksNonUtf8 ? [UNDECODABLE_NOTE] : [], { keepFileSeq: true });
   };
   reader.onerror = () => {
     if (reqId !== fileLoadSeq) return;
@@ -350,20 +353,24 @@ document.addEventListener("paste", (e) => {
   if (
     document.activeElement === pasteArea ||
     document.activeElement instanceof HTMLInputElement ||
-    document.activeElement instanceof HTMLTextAreaElement
+    document.activeElement instanceof HTMLTextAreaElement ||
+    (document.activeElement instanceof HTMLElement && document.activeElement.isContentEditable)
   ) {
     return;
   }
   const text = e.clipboardData?.getData("text");
   if (isTabularPaste(text)) {
+    let parsed: ParsedCsv;
+    let detection: Detection;
     try {
-      const p = parseCsv(text!);
-      detectChart(p);
+      parsed = parseCsv(text!);
+      detection = detectChart(parsed);
     } catch {
       return;
     }
     e.preventDefault();
-    handleText(text!);
+    fileLoadSeq++;
+    render(parsed, undefined, { preDetected: detection });
   }
 });
 
